@@ -8,7 +8,7 @@ const nuevoLibro = ref('')
 const listaLibros = ref<any[]>([])
 
 async function obtenerLibros() {
-  const { data, error } = await supabase.from('libros').select('*')
+  const { data, error } = await supabase.from('producto').select('*')
   if (error) {
     estado.value = "Error al conectar con Supabase"
   } else {
