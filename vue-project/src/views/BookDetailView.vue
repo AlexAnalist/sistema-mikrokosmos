@@ -46,6 +46,16 @@ const libro = ref<LibroDetalle>({
 const imagenesProducto = ref([libro.value.portada, libro.value.portada, libro.value.portada])
 const imagenActualIndex = ref(0)
 
+// --- LÓGICA DE EXPANSIÓN DE SINOPSIS ---
+const expandido = ref(false)
+
+const toggleLeerMas = () => {
+  expandido.value = !expandido.value
+}
+
+// Actualizamos el mock con un texto más largo para probar
+libro.value.sinopsis = 'Acompaña a Percy a través de esta apasionante serie de aventuras. Tras descubrir que es un semidiós hijo de Poseidón, Percy debe viajar al Olimpo para evitar una guerra entre los dioses. En su camino enfrentará monstruos mitológicos, descubrirá el valor de la amistad en el Campamento Mestizo y aprenderá que el destino no está escrito en piedra, sino que se forja con cada decisión.'
+
 const comentarios = ref([
   { usuario: '@felicita_perez', texto: 'Ame este libro, super recomendado!' },
   { usuario: '@Alejandro_Carrera', texto: 'Me llegó ayer y es igual a las fotos' }
@@ -108,13 +118,23 @@ const comentarios = ref([
             <h1 class="product-title">{{ libro.titulo }}</h1>
             
             <div class="main-meta">
-              <p><span>{{ libro.autor }}</span> <span class="price">Precio {{ libro.precio }}</span></p>
-              <p>{{ libro.editorial }}</p>
+              <p>
+                <span class="autor-text">{{ libro.autor }}</span> 
+                <span class="price">Precio {{ libro.precio }}</span>
+              </p>
+              <p class="editorial-text">{{ libro.editorial }}</p>
             </div>
 
             <div class="synopsis-section">
-              <p><strong>Sinopsis:</strong> {{ libro.sinopsis }}</p>
-              <button class="leer-mas">Leer más...</button>
+                <p>
+                    <strong>Sinopsis:</strong> 
+                    <span :class="['sinopsis-texto', { 'truncado': !expandido }]">
+                      {{ libro.sinopsis }}
+                    </span>
+                </p>
+                <button class="leer-mas-btn" @click="toggleLeerMas">
+                    {{ expandido ? 'Leer menos ↑' : 'Leer más...' }}
+                </button>
             </div>
 
             <div class="action-section">
@@ -148,6 +168,45 @@ const comentarios = ref([
   gap: 40px;
   max-width: 1100px;
   margin: 0 auto;
+}
+
+.synopsis-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 100%;
+}
+
+.sinopsis-texto {
+  display: block; 
+  line-height: 1.5;
+  transition: all 0.3s ease;
+}
+
+/* Corregido: Ahora el nombre coincide con el del template */
+.truncado {
+  display: -webkit-box;
+  -webkit-line-clamp: 3; 
+  -webkit-box-orient: vertical;  
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.leer-mas-btn {
+  align-self: flex-start;
+  background: #6A5ACD; 
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.leer-mas-btn:hover {
+  background: #9370DB;
 }
 
 /* IZQUIERDA */

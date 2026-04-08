@@ -107,15 +107,22 @@ const librosPrueba = ref(
         </section>
 
         <section class="book-grid-section">
-          <div class="book-grid">
-            <div v-for="libro in librosPrueba" :key="libro.id" class="book-card">
-              <img :src="libro.portada" :alt="libro.titulo" class="book-cover" />
-              <div class="card-overlay">
-                <span>Ver detalles</span>
-              </div>
-            </div>
-          </div>
-        </section>
+  <div class="book-grid">
+    <RouterLink 
+      v-for="libro in librosPrueba" 
+      :key="libro.id" 
+      :to="{ name: 'book-detail', params: { id: libro.id }}"
+      class="book-link-wrapper"
+    >
+      <div class="book-card">
+        <img :src="libro.portada" :alt="libro.titulo" class="book-cover" />
+        <div class="card-overlay">
+          <span>Ver detalles</span>
+        </div>
+      </div>
+    </RouterLink>
+  </div>
+</section>
       </main>
     </div>
 
@@ -135,6 +142,13 @@ const librosPrueba = ref(
   background-color: #fff;
   overflow-y: auto;
   transition: all 0.3s ease;
+}
+
+/* src/views/HomeView.vue (Style) */
+.book-link-wrapper {
+  text-decoration: none;
+  color: inherit; /* Mantiene los colores originales */
+  display: block; /* Para que ocupe todo el espacio de la card */
 }
 
 /* SLIDER */
