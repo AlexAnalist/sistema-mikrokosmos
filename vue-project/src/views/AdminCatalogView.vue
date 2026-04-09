@@ -31,6 +31,8 @@ const bannersData = ref([
   { imagen: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=1200", titulo: 'TENDENCIAS DEL MES' }
 ])
 const indiceBannerActual = ref(0)
+const ordenBannerActual = ref(1)
+const isCreandoBanner = ref(false)
 const modoVista = ref<'nuevo' | 'busqueda' | 'edicion' | 'banner'>('nuevo')
 const cargando = ref(false)
 
@@ -49,7 +51,7 @@ const form = ref({
   dim_largo: '',
   tapa: 'Blanda',
   color: '',
-  peso: '',
+  weight: '',
   categoria: 'Velas'
 })
 
@@ -82,7 +84,7 @@ const seleccionarProducto = (p: any) => {
     tipoEnvio: '',
     precio: p.precio || '',
     paginas: 200, dim_alto: '', dim_ancho: '', dim_largo: '', tapa: 'Blanda',
-    color: '', peso: '', categoria: 'Velas'
+    color: '', weight: '', categoria: 'Velas'
   }
   
   // Detección mejorada: si el nombre sugiere un accesorio o si viene de la tabla/lógica de artículos
@@ -115,13 +117,14 @@ onMounted(() => {
 const handleSave = () => {
   if (modoVista.value === 'banner') {
     alert('Banner guardado/actualizado (Simulación)')
+    isCreandoBanner.value = false
     return
   }
   let extraInfo = ''
   if (tipoProducto.value === 'libro') {
     extraInfo = `Dimensiones: ${form.value.dim_alto}x${form.value.dim_ancho}x${form.value.dim_largo} cm`
   } else {
-    extraInfo = `Categoría: ${form.value.categoria}, Peso: ${form.value.peso}g`
+    extraInfo = `Categoría: ${form.value.categoria}, Peso: ${form.value.weight}g`
   }
   
   const accion = modoVista.value === 'edicion' ? 'actualizado' : 'guardado'
@@ -134,15 +137,20 @@ const handleDelete = () => {
   if (confirm('¿Estás seguro de que deseas eliminar esto?')) {
     if (modoVista.value === 'banner') {
       alert('Banner eliminado (Simulación)')
+      isCreandoBanner.value = false
       return
     }
     form.value = {
       id_productos: null, titulo: '', autor: '', editorial: '', sinopsis: '', 
       tipoEnvio: '', precio: '', paginas: 200, dim_alto: '', dim_ancho: '', dim_largo: '', tapa: 'Blanda',
-      color: '', peso: '', categoria: 'Velas'
+      color: '', weight: '', categoria: 'Velas'
     }
     modoVista.value = 'nuevo'
   }
+}
+
+const prepareNuevoBanner = () => {
+  isCreandoBanner.value = true
 }
 </script>
 
@@ -170,9 +178,9 @@ const handleDelete = () => {
           <div class="editor-grid">
             <!-- COLUMNA IZQUIERDA: BOTONES DE ACCIÓN -->
             <div class="action-sidebar">
-              <button class="admin-btn" :class="{ active: modoVista === 'nuevo' }" @click="modoVista = 'nuevo'">Nuevo</button>
-              <button class="admin-btn" :class="{ active: modoVista === 'busqueda' }" @click="cargarProductos">Editar</button>
-              <button class="admin-btn">Header</button>
+              <button class="admin-btn" :class="{ active: modoVista === 'nuevo' || modoVista === 'edicion' }" @click="modoVista = 'nuevo'">Nuevo</button>
+              <button class="admin-btn" :class="{ active: (modoVista === 'busqueda') }" @click="cargarProductos">Editar</button>
+              <button class="admin-btn" :class="{ active: modoVista === 'banner' }" @click="modoVista = 'banner'; isCreandoBanner = false">Banner</button>
             </div>
 
             <!-- VISTA DE BÚSQUEDA -->
@@ -193,6 +201,75 @@ const handleDelete = () => {
                   {{ p.nombre }}
                 </div>
               </div>
+            </div>
+
+            <!-- VISTA DE BANNER -->
+            <div class="banner-manager-view" v-else-if="modoVista === 'banner'">
+              <!-- SUB-VISTA: CREAR NUEVO -->
+              <template v-if="isCreandoBanner">
+                <div class="banner-section">
+                  <p class="section-label">Vista previa:</p>
+                  <div class="banner-preview-box">
+                    <!-- Imagen de ejemplo del mockup -->
+                    <img src="https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=800" class="banner-preview-img-square" />
+                  </div>
+                  <div class="carousel-dots-admin">
+                    <span class="dot-admin active"></span>
+                    <span class="dot-admin"></span>
+                    <span class="dot-admin"></span>
+                  </div>
+                </div>
+
+                <div class="banner-section">
+                  <p class="section-label">Selecciona la imagen para reemplazar:</p>
+                  <div class="dropzone banner-dropzone">
+                    <Plus :size="80" class="plus-icon" />
+                  </div>
+                </div>
+
+                <div class="order-selector-section">
+                  <p class="section-label">Selecciona el orden:</p>
+                  <div class="order-boxes">
+                    <div 
+                      v-for="n in 4" 
+                      :key="n" 
+                      class="order-box"
+                      :class="{ active: n === ordenBannerActual }"
+                      @click="ordenBannerActual = n"
+                    >
+                      {{ n }}
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- SUB-VISTA: LISTA EXISTENTE -->
+              <template v-else>
+                <div class="banner-section">
+                  <p class="section-label">Selecciona un banner existente:</p>
+                  <div class="banner-preview-box">
+                    <img :src="bannersData[indiceBannerActual].imagen" class="banner-preview-img" />
+                  </div>
+                  <div class="carousel-dots-admin">
+                    <span 
+                      v-for="(_, i) in bannersData" 
+                      :key="i" 
+                      class="dot-admin"
+                      :class="{ active: i === indiceBannerActual }"
+                      @click="indiceBannerActual = i"
+                    ></span>
+                  </div>
+                </div>
+
+                <div class="banner-section">
+                  <p class="section-label">Selecciona la imagen para reemplazar:</p>
+                  <div class="dropzone banner-dropzone">
+                    <Plus :size="80" class="plus-icon" />
+                  </div>
+                </div>
+
+                <button class="add-new-banner-btn" @click="prepareNuevoBanner">Agrega un nuevo banner</button>
+              </template>
             </div>
 
             <!-- VISTA DE FORMULARIO (EDICIÓN O NUEVO) -->
@@ -264,15 +341,6 @@ const handleDelete = () => {
                   <div class="radio-style-text" v-else>
                     {{ tipoProducto === 'libro' ? 'Libro' : 'Artículo' }}
                   </div>
-
-                  <div class="icon-actions">
-                    <button class="icon-btn save" @click="handleSave">
-                      <Check :size="30" />
-                    </button>
-                    <button class="icon-btn delete" @click="handleDelete">
-                      <Trash2 :size="30" />
-                    </button>
-                  </div>
                 </div>
 
                 <div class="inputs-stack">
@@ -310,7 +378,15 @@ const handleDelete = () => {
 .content-area { flex: 1; padding: 40px; overflow-y: auto; background-color: #fff; }
 
 .admin-container { max-width: 1200px; margin: 0 auto; }
-.view-title { font-family: 'Georgia', serif; font-size: 2.5rem; color: #333; margin-bottom: 30px; }
+.admin-view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+.header-actions { display: flex; gap: 30px; align-items: center; }
+
+.view-title { font-family: 'Georgia', serif; font-size: 2.5rem; color: #333; }
 
 .editor-grid {
   display: grid;
@@ -318,6 +394,114 @@ const handleDelete = () => {
   gap: 40px;
   align-items: start;
 }
+
+/* GESTIÓN DE BANNERS */
+.banner-manager-view {
+  grid-column: 2 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.section-label {
+  font-family: 'Georgia', serif;
+  font-size: 1.2rem;
+  color: #333;
+  margin-bottom: 15px;
+}
+
+.banner-preview-box {
+  width: 100%;
+  aspect-ratio: 21/9;
+  background-color: #E2E2E2;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.banner-preview-img { width: 100%; height: 100%; object-fit: cover; }
+.banner-preview-img-square {
+  height: 100%;
+  aspect-ratio: 1/1;
+  object-fit: contain;
+  margin: 0 auto;
+  display: block;
+}
+
+.carousel-dots-admin {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.dot-admin {
+  width: 10px;
+  height: 10px;
+  background-color: #D1C4E9;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.dot-admin.active { background-color: #8B77D0; transform: scale(1.2); }
+
+/* SELECTOR DE ORDEN */
+.order-selector-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.order-boxes {
+  display: flex;
+  gap: 15px;
+  justify-content: flex-end;
+}
+
+.order-box {
+  width: 40px;
+  height: 40px;
+  background-color: #E0E0E0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 4px;
+  font-family: 'Georgia', serif;
+  font-size: 1.1rem;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.order-box:hover { background-color: #D1C4E9; }
+.order-box.active { background-color: #C1B4E7; color: #000; font-weight: bold; }
+
+.banner-dropzone {
+  width: 100%;
+  aspect-ratio: 21/9;
+  background-color: #E2E2E2;
+  border: 2px dashed #D1C4E9;
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+.add-new-banner-btn {
+  background-color: #C1B4E7;
+  color: #333;
+  border: none;
+  padding: 15px 40px;
+  border-radius: 12px;
+  font-family: 'Georgia', serif;
+  font-size: 1.3rem;
+  align-self: center;
+  cursor: pointer;
+  transition: background 0.3s;
+  margin-top: 20px;
+}
+.add-new-banner-btn:hover { background-color: #A294DF; }
 
 /* COLUMNA IZQUIERDA */
 .action-sidebar { display: flex; flex-direction: column; gap: 30px; margin-top: 50px; }
