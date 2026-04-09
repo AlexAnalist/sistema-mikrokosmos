@@ -40,9 +40,9 @@ const obtenerDatosHome = async () => {
     
     // Consultamos la tabla 'producto' y traemos la 'url_imagen' de la tabla relacionada
     // Nota: Supabase usa el formato ?select=columna,tabla_relacionada(columna)
-    const url = `https://qqzqtxfykfmauujsqgoy.supabase.co/rest/v1/producto?select=id_productos,nombre,precio,producto_imagenes(url_imagen)`
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/producto?select=id_productos,nombre,precio,producto_imagenes(url_imagen)`
 
-    const supabaseKey = 'sb_publishable_URWKs3wjsKY0qg-GvXbHjg_CeLMSw25'
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
     const res = await fetch(url, {
       method: 'GET',
