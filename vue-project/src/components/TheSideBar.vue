@@ -7,8 +7,8 @@ defineProps<{
   isOpen: boolean
 }>()
 
-// Definimos el evento para cerrar el sidebar
-const emit = defineEmits(['toggle-menu'])
+// Definimos los eventos
+const emit = defineEmits(['toggle-menu', 'filtrar'])
 
 interface Seccion {
   nombre: string;
@@ -64,7 +64,12 @@ const toggleSeccion = (index: number) => {
             </div>
 
             <ul v-if="seccion.abierto" class="submenu">
-              <li v-for="opcion in seccion.opciones" :key="opcion" class="submenu-item">
+              <li 
+                v-for="opcion in seccion.opciones" 
+                :key="opcion" 
+                class="submenu-item"
+                @click="emit('filtrar', { categoria: seccion.nombre, valor: opcion })"
+              >
                 {{ opcion }}
               </li>
             </ul>

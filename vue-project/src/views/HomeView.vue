@@ -3,15 +3,9 @@ import { ref, onMounted, onUnmounted, computed } from 'vue'
 import TheHeader from '@/components/TheHeader.vue'
 import TheSidebar from '@/components/TheSideBar.vue'
 import TheFooter from '@/components/TheFooter.vue'
+import DynamicBanner from '@/components/DynamicBanner.vue'
 
 // --- DEFINICIÓN DE TIPOS ---
-interface Banner {
-  imagen: string;
-  subtitulo: string;
-  titulo: string;
-  promo: string;
-}
-
 // Interfaz ajustada a tu tabla 'public.producto'
 interface ProductoHome {
   id_productos: number; // Coincide con tu PK
@@ -23,14 +17,22 @@ interface ProductoHome {
 
 // --- ESTADOS ---
 const sidebarExpandido = ref(true)
-const indiceActual = ref(0)
-const banners = ref<Banner[]>([])
 const productos = ref<ProductoHome[]>([])
 const cargando = ref(true)
-let intervalo: any = null
+const filtroActivo = ref<{ categoria: string, valor: string } | null>(null)
 
 const toggleSidebar = () => {
   sidebarExpandido.value = !sidebarExpandido.value
+}
+
+const aplicarFiltro = (filtro: { categoria: string, valor: string }) => {
+  filtroActivo.value = filtro
+  obtenerDatosHome()
+}
+
+const limpiarFiltro = () => {
+  filtroActivo.value = null
+  obtenerDatosHome()
 }
 
 // --- PETICIONES CON FETCH ---
@@ -38,13 +40,28 @@ const obtenerDatosHome = async () => {
   try {
     cargando.value = true
     
-    // Consultamos la tabla 'producto' y traemos la 'url_imagen' de la tabla relacionada
-    // Nota: Supabase usa el formato ?select=columna,tabla_relacionada(columna)
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/producto?select=id_productos,nombre,precio,producto_imagenes(url_imagen)`
+    // Base de la URL
+    let baseUrl = `https://qqzqtxfykfmauujsqgoy.supabase.co/rest/v1/producto?select=id_productos,nombre,precio,producto_imagenes(url_imagen)`
+    
+    // Aplicar filtros dinámicos según la categoría del Sidebar
+    if (filtroActivo.value) {
+      const { categoria, valor } = filtroActivo.value
+      
+      if (categoria === 'Géneros') {
+        baseUrl += `,libro_detalles!inner(genero)&libro_detalles.genero=eq.${valor}`
+      } else if (categoria === 'Editoriales') {
+        baseUrl += `,libro_detalles!inner(editorial)&libro_detalles.editorial=eq.${valor}`
+      } else if (categoria === 'Accesorios literarios') {
+        baseUrl += `,articulo_detalles!inner(categoria)&articulo_detalles.categoria=eq.${valor}`
+      } else if (categoria === 'Sagas/Estuches') {
+        // Asumimos que también están en libro_detalles bajo una lógica similar si aplica
+        baseUrl += `,libro_detalles!inner(genero)&libro_detalles.genero=eq.${valor}`
+      }
+    }
 
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    const supabaseKey = 'sb_publishable_URWKs3wjsKY0qg-GvXbHjg_CeLMSw25'
 
-    const res = await fetch(url, {
+    const res = await fetch(baseUrl, {
       method: 'GET',
       headers: {
         'apikey': supabaseKey,
@@ -66,16 +83,6 @@ const obtenerDatosHome = async () => {
       portada: p.producto_imagenes?.[0]?.url_imagen || 'https://via.placeholder.com/200x300'
     }))
 
-    // Simulamos banners estáticos ya que pediste no tocarlos
-    banners.value = [
-      {
-        imagen: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=1200",
-        subtitulo: '¿Encontrarte a ti misma?',
-        titulo: 'PREVENTA IMPERDIBLE*',
-        promo: '¡Asegura tu libro hoy!'
-      }
-    ]
-
   } catch (error) {
     console.error("Error en la conexión:", error)
   } finally {
@@ -83,25 +90,8 @@ const obtenerDatosHome = async () => {
   }
 }
 
-// --- LÓGICA DEL CARRUSEL ---
-const bannerActivo = computed<Banner | null>(() => {
-  if (banners.value.length === 0) return null
-  return banners.value[indiceActual.value] as Banner
-})
-
-const siguienteBanner = () => {
-  if (banners.value.length > 0) {
-    indiceActual.value = (indiceActual.value + 1) % banners.value.length
-  }
-}
-
 onMounted(() => {
   obtenerDatosHome()
-  intervalo = setInterval(siguienteBanner, 10000)
-})
-
-onUnmounted(() => {
-  if (intervalo) clearInterval(intervalo)
 })
 </script>
 
@@ -110,7 +100,11 @@ onUnmounted(() => {
     <TheHeader />
 
     <div class="main-wrapper">
-      <TheSidebar :is-open="sidebarExpandido" @toggle-menu="toggleSidebar" />
+      <TheSidebar 
+        :is-open="sidebarExpandido" 
+        @toggle-menu="toggleSidebar" 
+        @filtrar="aplicarFiltro"
+      />
 
       <main class="content-area">
         <div v-if="cargando" class="loader-container">
@@ -118,22 +112,20 @@ onUnmounted(() => {
         </div>
 
         <template v-else>
-          <section v-if="banners.length > 0" class="banner-section">
-            <div class="banner-slider">
-              <transition name="fade" mode="out-in">
-                <div v-if="bannerActivo" :key="indiceActual" class="banner-container">
-                  <img :src="bannerActivo.imagen" class="banner-img" />
-                  <div class="banner-text-overlay">
-                    <p class="subtitle">{{ bannerActivo.subtitulo }}</p>
-                    <h2 class="title">{{ bannerActivo.titulo }}</h2>
-                    <p class="promo">{{ bannerActivo.promo }}</p>
-                  </div>
-                </div>
-              </transition>
-            </div>
-          </section>
-
+          <DynamicBanner v-if="!filtroActivo" />
+          
           <section class="book-grid-section">
+            <div v-if="filtroActivo" class="filter-header">
+              <span class="active-filter">
+                Filtrando por: <strong>{{ filtroActivo.valor }}</strong>
+              </span>
+              <button class="btn-clear" @click="limpiarFiltro">Limpiar Filtros</button>
+            </div>
+
+            <div v-if="productos.length === 0" class="no-results">
+              <p>No se encontraron libros para esta categoría.</p>
+              <button class="btn-clear" @click="limpiarFiltro">Ver todo el catálogo</button>
+            </div>
             <div class="book-grid">
               <RouterLink 
                 v-for="prod in productos" 
@@ -186,4 +178,36 @@ onUnmounted(() => {
 }
 .book-card:hover .card-overlay { opacity: 1; }
 .book-link-wrapper { text-decoration: none; color: inherit; display: block; }
+
+/* Estilos de Filtrado */
+.filter-header {
+  margin-bottom: 25px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 10px 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #6A5ACD;
+}
+.active-filter { color: #333; font-size: 1.1rem; }
+.active-filter strong { color: #6A5ACD; }
+.btn-clear {
+  background: none;
+  border: 1px solid #6A5ACD;
+  color: #6A5ACD;
+  padding: 5px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: 0.3s;
+}
+.btn-clear:hover { background: #6A5ACD; color: white; }
+
+.no-results {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+.no-results p { font-size: 1.2rem; margin-bottom: 20px; }
 </style>
