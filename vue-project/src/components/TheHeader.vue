@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, ShoppingCart, UserCircle } from 'lucide-vue-next'
 import { supabase } from '@/supabase'
@@ -8,6 +8,45 @@ import { useCartStore } from '@/stores/cart'
 const cartStore = useCartStore()
 const router = useRouter()
 const haySesion = ref(false)
+
+const searchQuery = ref('')
+const sugerencias = ref<any[]>([])
+const mostrarSugerencias = ref(false)
+const suggestionsContainer = ref<HTMLElement | null>(null)
+
+const buscarProductos = async () => {
+  if (searchQuery.value.length < 2) {
+    sugerencias.value = []
+    return
+  }
+
+  const { data, error } = await supabase
+    .from('producto')
+    .select('id_productos, nombre, precio')
+    .ilike('nombre', `%${searchQuery.value}%`)
+    .limit(5)
+
+  if (!error && data) {
+    sugerencias.value = data
+    mostrarSugerencias.value = true
+  }
+}
+
+watch(searchQuery, () => {
+  buscarProductos()
+})
+
+const irADetalle = (id: number) => {
+  searchQuery.value = ''
+  mostrarSugerencias.value = false
+  router.push({ name: 'book-detail', params: { id } })
+}
+
+const handleClickOutside = (event: MouseEvent) => {
+  if (suggestionsContainer.value && !suggestionsContainer.value.contains(event.target as Node)) {
+    mostrarSugerencias.value = false
+  }
+}
 
 const obtenerSesion = async () => {
   // 1. Verificamos sesión de Supabase Auth
@@ -34,6 +73,11 @@ const irAlPerfil = async () => {
 
 onMounted(() => {
   verificarSesion()
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -43,9 +87,28 @@ onMounted(() => {
       <img src="/assets/logo_tree.png" alt="Mikrokosmos Logo" class="logo-img" /> <h1 class="brand-name">Librería Mikrokosmos</h1>
     </router-link>
     
-    <div class="search-bar">
-      <input type="text" placeholder="Buscar..." />
-      <Search class="icon search-icon" />
+    <div class="search-container" ref="suggestionsContainer">
+      <div class="search-bar">
+        <input 
+          type="text" 
+          v-model="searchQuery" 
+          placeholder="Busca tus libros aquí..." 
+          @focus="mostrarSugerencias = true"
+        />
+        <Search class="icon search-icon" />
+      </div>
+
+      <div v-if="mostrarSugerencias && sugerencias.length > 0" class="suggestions-list">
+        <div 
+          v-for="sug in sugerencias" 
+          :key="sug.id_productos" 
+          class="suggestion-item"
+          @click="irADetalle(sug.id_productos)"
+        >
+          <span class="sug-name">{{ sug.nombre }}</span>
+          <span class="sug-price">${{ sug.precio }}</span>
+        </div>
+      </div>
     </div>
     
     <div class="user-actions">
@@ -77,10 +140,15 @@ onMounted(() => {
 .logo-img { height: 55px; }
 .brand-name { font-size: 1.5rem; font-weight: bold; margin: 0; }
 
+.search-container {
+  flex: 0 1 40%;
+  position: relative;
+  z-index: 1000;
+}
+
 .search-bar {
   display: flex;
   align-items: center;
-  flex: 0 1 40%;
   background-color: white;
   border-radius: 20px;
   padding: 0 15px;
@@ -99,12 +167,43 @@ onMounted(() => {
   outline: none;
   background: transparent;
   font-family: inherit;
+  font-size: 1rem;
 }
 
 .search-icon {
   color: #6A5ACD; /* Morado para el icono de búsqueda */
   margin-left: 5px;
 }
+
+.suggestions-list {
+  position: absolute;
+  top: 110%;
+  left: 0;
+  width: 100%;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+  overflow: hidden;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.suggestion-item {
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #333;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s;
+}
+
+.suggestion-item:last-child { border-bottom: none; }
+.suggestion-item:hover { background-color: #f7f7f7; }
+
+.sug-name { font-family: 'Georgia', serif; font-size: 1.05rem; }
+.sug-price { color: #6A5ACD; font-weight: bold; font-size: 0.9rem; }
 
 .user-actions { display: flex; gap: 35px; align-items: center; }
 .icon { cursor: pointer; transition: color 0.3s, transform 0.3s; }
