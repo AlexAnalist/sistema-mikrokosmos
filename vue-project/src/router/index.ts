@@ -6,6 +6,7 @@ import RegisterView from '../views/RegisterView.vue'
 import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import CartView from '../views/CartView.vue'
 import CheckoutView from '../views/CheckoutView.vue'
+import UserProfile from '../views/UserProfile.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -22,6 +23,7 @@ const router = createRouter({
     { path: '/recuperar', name: 'forgotPassword', component: ForgotPasswordView },
     { path: '/carrito', name: 'cart', component: CartView },
     { path: '/checkout', name: 'checkout', component: CheckoutView },
+    { path: '/perfil', name: 'profile', component: UserProfile }, 
   ]
 })
 
