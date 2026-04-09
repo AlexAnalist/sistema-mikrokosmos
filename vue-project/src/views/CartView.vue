@@ -109,44 +109,83 @@
                   </div>
                   
                   <div v-else class="shipping-form">
-                    <div class="form-group">
-                      <label>Nombre</label>
-                      <input type="text" class="form-input" placeholder="Tu nombre" />
+                    
+                    <!-- OPCIÓN: ENTREGA LOCAL -->
+                    <div v-if="deliveryType === 'local'" class="local-layout">
+                      <div class="sub-radio-group">
+                        <label class="sub-radio-label hina-mincho-font">
+                          <input type="radio" v-model="localOption" value="sede" class="custom-radio" /> Recoger en la sede principal.
+                        </label>
+                        <label class="sub-radio-label hina-mincho-font">
+                          <input type="radio" v-model="localOption" value="delivery" class="custom-radio" /> Delivery en la ciudad.
+                        </label>
+                      </div>
+
+                      <div class="form-group-custom">
+                        <label class="input-label-local hina-mincho-font">Dirección</label>
+                        <input type="text" class="form-input-flat" placeholder="Dirección" v-model="formData.direccion" />
+                      </div>
+
+                      <div class="type-display">
+                        <h2 class="hina-mincho-font">Tipo Envio: Local.</h2>
+                      </div>
                     </div>
-                    <div class="form-group">
-                      <label>Cédula (ID)</label>
-                      <input type="text" class="form-input" placeholder="Tu cédula" />
+
+                    <!-- OPCIÓN: ENVIO NACIONAL -->
+                    <div v-else class="national-layout">
+                      <div class="form-group-custom">
+                        <label class="input-label-local hina-mincho-font">Empresa de envios</label>
+                        <select v-model="formDataNational.empresa" class="form-select-purple hina-mincho-font">
+                          <option value="" disabled selected>Empresa</option>
+                          <option value="mrw">MRW</option>
+                          <option value="zoom">Zoom</option>
+                          <option value="tealca">Tealca</option>
+                          <option value="domesa">Domesa</option>
+                        </select>
+                      </div>
+
+                      <div class="form-group-custom">
+                        <label class="input-label-local hina-mincho-font">Estado</label>
+                        <select v-model="formDataNational.estado" class="form-select-purple hina-mincho-font">
+                          <option value="" disabled selected>Estado</option>
+                          <option v-for="estado in estadosVenezuela" :key="estado" :value="estado">{{ estado }}</option>
+                        </select>
+                      </div>
+
+                      <div class="form-group-custom">
+                        <label class="input-label-local hina-mincho-font">Ciudad</label>
+                        <select v-model="formDataNational.ciudad" class="form-select-purple hina-mincho-font">
+                          <option value="" disabled selected>Ciudad</option>
+                          <option v-for="ciudad in ciudadesFiltradas" :key="ciudad" :value="ciudad">{{ ciudad }}</option>
+                        </select>
+                        <!-- Si no hay estado seleccionado, se muestra un select vacío o un mensaje -->
+                        <p v-if="!formDataNational.estado" class="hina-mincho-font hint-text">Selecciona un estado primero</p>
+                      </div>
+
+                      <div class="form-group-custom">
+                        <label class="input-label-local hina-mincho-font">Dirección</label>
+                        <input type="text" class="form-input-flat" placeholder="Dirección de la agencia" v-model="formDataNational.direccionAgencia" />
+                      </div>
+
+                      <div class="type-display">
+                        <h2 class="hina-mincho-font">Tipo Envio: Nacional.</h2>
+                      </div>
                     </div>
-                    <div class="form-group">
-                      <label>Teléfono</label>
-                      <input type="tel" class="form-input" placeholder="Tu teléfono" />
-                    </div>
-                    <div class="form-group">
-                      <label>Ciudad</label>
-                      <select class="form-select">
-                        <option value="" disabled selected>Seleccione la ciudad</option>
-                        <option value="San Cristobal">San Cristóbal</option>
-                        <option value="Tariba">Táriba</option>
-                        <option value="Palmira">Palmira</option>
-                        <option value="Rubio">Rubio</option>
-                      </select>
-                    </div>
-                    <div class="form-group">
-                      <label>Dirección exacta</label>
-                      <textarea class="form-textarea" placeholder="Tu dirección detallada"></textarea>
-                    </div>
+
                   </div>
                 </div>
                 
                 <div class="delivery-footer">
-                  <button @click="currentStep = 1" class="back-icon-link" style="background:transparent;border:none;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M9 14 4 9l5-5"/>
-                      <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v1.5"/>
+                  <button @click="currentStep = 1" class="back-link-icon" title="Volver al carrito">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M9 14L4 9L9 4" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M4 9H14.5C17.5376 9 20 11.4624 20 14.5V16" stroke="black" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                   </button>
-                  <button class="btn send-btn" :disabled="!deliveryType">Enviar Aqui</button>
-                  <button class="btn back-btn" @click="currentStep = 1">Volver</button>
+                  <button class="btn-primary" :disabled="!isFormValid || isProcessing" @click="processDelivery">
+                    {{ isProcessing ? 'Procesando...' : 'Enviar Aquí' }}
+                  </button>
+                  <button class="btn-outline" @click="currentStep = 1">Volver</button>
                 </div>
               </div>
             </div>
@@ -218,7 +257,96 @@ export interface CartItem {
 
 // Variables Globales del Flow
 const currentStep = ref(1) // 1 = Carrito, 2 = Formulario de Envío
-const deliveryType = ref('')
+const deliveryType = ref('local')
+const localOption = ref('sede')
+const isProcessing = ref(false)
+const formData = ref({ direccion: '' })
+
+// Datos para Envío Nacional
+const formDataNational = ref({
+  empresa: '',
+  estado: '',
+  ciudad: '',
+  direccionAgencia: ''
+})
+
+const estadosVenezuela = [
+  "Amazonas", "Anzoátegui", "Apure", "Aragua", "Barinas", "Bolívar", "Carabobo", 
+  "Cojedes", "Delta Amacuro", "Falcón", "Guárico", "Lara", "Mérida", "Miranda", 
+  "Monagas", "Nueva Esparta", "Portuguesa", "Sucre", "Trujillo", 
+  "La Guaira", "Yaracuy", "Zulia", "Distrito Capital"
+]
+
+// Diccionario simplificado de ciudades
+const ciudadesPorEstado: Record<string, string[]> = {
+  "Distrito Capital": ["Caracas"],
+  "Zulia": ["Maracaibo", "Cabimas", "Ciudad Ojeda"],
+  "Carabobo": ["Valencia", "Puerto Cabello", "Guacara"],
+  "Aragua": ["Maracay", "Turmero", "La Victoria"],
+  "Lara": ["Barquisimeto", "Cabudare"],
+  "Anzoátegui": ["Barcelona", "Puerto La Cruz", "Lechería", "El Tigre"],
+  "Bolívar": ["Ciudad Guayana", "Ciudad Bolívar"],
+  "Miranda": ["Los Teques", "Guarenas", "Guatire"],
+  "Mérida": ["Mérida", "El Vigía"],
+  "Nueva Esparta": ["Porlamar", "La Asunción"]
+  // Se pueden añadir más según sea necesario
+}
+
+const ciudadesFiltradas = computed(() => {
+  if (!formDataNational.value.estado) return []
+  return ciudadesPorEstado[formDataNational.value.estado] || ["Cualquier ciudad"]
+})
+
+const isFormValid = computed(() => {
+  if (deliveryType.value === 'local') {
+    return !!formData.value.direccion && !!localOption.value
+  } else if (deliveryType.value === 'nacional') {
+    return !!formDataNational.value.empresa && 
+           !!formDataNational.value.estado && 
+           !!formDataNational.value.ciudad && 
+           !!formDataNational.value.direccionAgencia
+  }
+  return false
+})
+
+const processDelivery = () => {
+  isProcessing.value = true
+  
+  // 1. Construir el mensaje para WhatsApp
+  let message = "¡Hola Mikrokosmos! 📚⚡\n\nQuiero realizar un pedido con los siguientes detalles:\n\n"
+  
+  // Detalles de Envío
+  if (deliveryType.value === 'local') {
+    message += "*Tipo de Entrega:* Entrega Local 🏠\n"
+    message += `*Opción:* ${localOption.value === 'sede' ? 'Recoger en sede' : 'Delivery en la ciudad'}\n`
+    message += `*Dirección:* ${formData.value.direccion || 'No especificada'}\n`
+  } else {
+    message += "*Tipo de Entrega:* Envío Nacional 🚚\n"
+    message += `*Empresa:* ${formDataNational.value.empresa.toUpperCase() || 'Sin especificar'}\n`
+    message += `*Estado:* ${formDataNational.value.estado || 'Sin especificar'}\n`
+    message += `*Ciudad:* ${formDataNational.value.ciudad || 'Sin especificar'}\n`
+    message += `*Agencia:* ${formDataNational.value.direccionAgencia || 'Sin especificar'}\n`
+  }
+
+  message += "\n*Resumen del Pedido:* 🛒\n"
+  cart.value.forEach(item => {
+    message += `- ${item.title} (x${item.quantity}): $${(item.price * item.quantity).toFixed(2)}\n`
+  })
+  
+  message += `\n*TOTAL A PAGAR:* $${total_carrito.value.toFixed(2)}\n`
+  message += "\n_¡Quedo atento a su confirmación!_"
+
+  // 2. Codificar y Redirigir
+  const phoneNumber = "584247846963"
+  const encodedMessage = encodeURIComponent(message)
+  const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`
+
+  // Simular un pequeño delay de procesamiento para UI
+  setTimeout(() => {
+    isProcessing.value = false
+    window.open(whatsappUrl, '_blank')
+  }, 1000)
+}
 
 // Datos simulados (para visualizar. Cuando esté en prod se llena dinámicamente)
 const props = defineProps<{
@@ -292,36 +420,122 @@ const removeItem = (id: string) => {
 .qty-btn { background: #776CBE; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; }
 .delete-btn { margin-left: auto; background: transparent; color: crimson; border: 1px solid crimson; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
 
-/* PASO 2 COMPONENTES (Formulario) */
+/* PASO 2 COMPONENTES (Caja de Checkout) */
 .checkout-form-column { width: 100%; display: flex; flex-direction: column; animation: fadeIn 0.3s ease; }
-.delivery-title { font-family: 'Hina Mincho', serif; font-size: 1.3rem; font-weight: normal; margin-bottom: 15px; }
-.delivery-type-options { display: flex; gap: 30px; margin-bottom: 25px; }
-.radio-label { display: flex; align-items: center; gap: 8px; font-size: 1.1rem; cursor: pointer; font-family: 'Hina Mincho', serif; }
+.delivery-title { font-family: 'Hina Mincho', serif; font-size: 1.8rem; font-weight: normal; margin-bottom: 25px; padding-left: 5px; }
+.delivery-type-options { display: flex; gap: 35px; margin-bottom: 30px; padding-left: 10px; }
+.radio-label { display: flex; align-items: center; gap: 10px; font-size: 1.2rem; cursor: pointer; font-family: 'Hina Mincho', serif; color: #333; }
 
-.delivery-container { border: 1px solid #ccc; border-radius: 12px; padding: 30px; min-height: 400px; display: flex; flex-direction: column; }
-.delivery-header { margin-bottom: 30px; }
-.delivery-box-title { font-family: 'Hina Mincho', serif; font-size: 1.3rem; margin: 0; font-weight: 500; }
-.delivery-box-subtitle { font-family: 'Hina Mincho', serif; font-size: 0.95rem; color: #555; margin-top: 8px; }
+.delivery-container { 
+  border: 1.5px solid #d1d1d1; 
+  border-radius: 35px; 
+  padding: 30px 40px; 
+  min-height: 480px; 
+  display: flex; 
+  flex-direction: column;
+  background-color: #fff;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+}
 
-.delivery-body { flex: 1; display: flex; flex-direction: column; }
-.unselected-state { display: flex; align-items: center; margin-top: 60px; font-family: 'Hina Mincho', serif; font-size: 1.2rem; color: #333; }
-.shipping-form { display: flex; flex-direction: column; gap: 18px; margin-bottom: 20px; font-family: inherit; animation: fadeIn 0.4s ease-in-out; }
+.delivery-header { margin-bottom: 25px; }
+.delivery-box-title { font-family: 'Hina Mincho', serif; font-size: 1.8rem; margin: 0; font-weight: 500; color: #000; }
+.delivery-box-subtitle { font-family: 'Hina Mincho', serif; font-size: 1rem; color: #333; margin-top: 8px; }
 
-.form-group { display: flex; flex-direction: column; gap: 6px; }
-.form-group label { font-size: 0.95rem; font-weight: 500; color: #333; }
-.form-input, .form-select, .form-textarea { padding: 12px 14px; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; outline: none; transition: border-color 0.2s ease; font-family: inherit; }
-.form-input:focus, .form-select:focus, .form-textarea:focus { border-color: #776CBE; }
-.form-textarea { resize: vertical; min-height: 90px; }
+.delivery-body { 
+  flex: 1; 
+  display: flex; 
+  flex-direction: column; 
+}
 
-.delivery-footer { display: flex; align-items: center; gap: 15px; margin-top: auto; padding-top: 30px; }
-.back-icon-link { color: #000; cursor: pointer; display: flex; align-items: center; }
-.back-icon-link:hover { opacity: 0.7; }
-.btn { padding: 8px 24px; font-size: 1.1rem; border-radius: 6px; cursor: pointer; font-family: 'Hina Mincho', serif; }
-.send-btn { background-color: #d1d1d1; color: #333; border: none; font-weight: normal; transition: 0.3s; }
-.send-btn:not(:disabled) { background-color: #776CBE; color: white; }
-.send-btn:disabled { cursor: not-allowed; }
-.back-btn { background-color: transparent; color: #776CBE; border: 1px solid #ccc; font-weight: normal; }
-.back-btn:hover { border-color: #776CBE; }
+.unselected-state { display: flex; align-items: center; margin-top: 40px; font-family: 'Hina Mincho', serif; font-size: 1.2rem; color: #333; }
+
+.shipping-form { display: flex; flex-direction: column; animation: fadeIn 0.4s ease-in-out; }
+
+/* Layout Local */
+.local-layout { display: flex; flex-direction: column; }
+.sub-radio-group { display: flex; flex-direction: column; gap: 15px; margin-bottom: 25px; }
+.sub-radio-label { display: flex; align-items: center; gap: 12px; font-size: 1.3rem; cursor: pointer; color: #000; font-family: 'Hina Mincho', serif; }
+
+.custom-radio { width: 20px; height: 20px; cursor: pointer; }
+
+.form-group-custom { display: flex; flex-direction: column; gap: 8px; margin-bottom: 25px; }
+.input-label-local { font-size: 1.2rem; color: #000; font-family: 'Hina Mincho', serif; }
+.form-input-flat { 
+  width: 100%;
+  padding: 10px 15px; 
+  border: 1.5px solid #e0e0e0; 
+  border-radius: 10px; 
+  background-color: #fcfcfc;
+  font-size: 1.1rem;
+  outline: none;
+  font-family: inherit;
+}
+.form-input-flat::placeholder { color: #aaa; }
+
+/* Estilos Select Púrpura (Nacional) */
+.form-select-purple {
+  width: 60%;
+  padding: 10px 15px;
+  border-radius: 8px;
+  border: none;
+  background-color: #776CBE;
+  color: white;
+  font-size: 1.1rem;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+  padding-right: 45px;
+}
+
+.form-select-purple option {
+  background-color: #fff;
+  color: #333;
+}
+
+.hint-text {
+  font-size: 1rem;
+  color: #776CBE;
+  margin-top: 5px;
+  font-style: italic;
+}
+
+.type-display { margin-bottom: 50px; }
+.type-display h2 { font-size: 3.2rem; color: #000; margin: 0; font-weight: normal; font-family: 'Hina Mincho', serif; }
+
+/* Footer del Checkout */
+.delivery-footer { display: flex; align-items: center; gap: 20px; margin-top: auto; padding-top: 20px; }
+.back-link-icon { color: #000; cursor: pointer; display: flex; align-items: center; background: transparent; border: none; padding: 0; transition: opacity 0.2s; }
+.back-link-icon:hover { opacity: 0.6; }
+
+.btn-primary { 
+  background-color: #776CBE; 
+  color: white; 
+  border: none; 
+  padding: 10px 35px; 
+  border-radius: 10px; 
+  font-size: 1.3rem;
+  cursor: pointer;
+  font-family: 'Hina Mincho', serif;
+  transition: filter 0.2s;
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-primary:disabled { background-color: #cccccc; cursor: not-allowed; opacity: 0.7; }
+
+.btn-outline { 
+  border: 2px solid #b1b1b1; 
+  color: #776CBE; 
+  padding: 9px 30px; 
+  border-radius: 10px; 
+  background: #fff;
+  cursor: pointer;
+  font-size: 1.3rem;
+  font-family: 'Hina Mincho', serif;
+  transition: background 0.2s;
+}
+.btn-outline:hover { background-color: #f9f9f9; }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-5px); }
@@ -330,15 +544,15 @@ const removeItem = (id: string) => {
 
 /* COLUMNA DERECHA (TICKET) */
 .cart-summary-column { flex: 4; height: fit-content; }
-.summary-box { background-color: #ffffff; padding: 30px; border-radius: 12px; border: 1px solid #e6e6e6; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03); transition: all 0.3s ease; }
-.sticky-ticket { position: sticky; top: 40px; } /* Solo se activa en el paso 2 */
-.summary-card-title { font-size: 1.3rem; font-weight: 500; text-align: center; margin-bottom: 20px; margin-top: 0; color: #000; }
+.summary-box { background-color: #ffffff; padding: 40px; border-radius: 20px; border: 1.5px solid #eee; box-shadow: 0 10px 30px rgba(0,0,0,0.03); transition: all 0.3s ease; }
+.sticky-ticket { position: sticky; top: 40px; }
+.summary-card-title { font-size: 2.2rem; font-weight: 500; text-align: center; margin-bottom: 25px; margin-top: 0; color: #000; font-family: 'Hina Mincho', serif; }
 .dashed-divider { height: 1px; border-bottom: 1px dashed #cccccc; margin: 15px 0; }
-.summary-items-list { max-height: 250px; overflow-y: auto; padding-right: 5px; margin: 10px 0; }
+.summary-items-list { max-height: 300px; overflow-y: auto; padding-right: 5px; margin: 10px 0; }
 .summary-items-list::-webkit-scrollbar { width: 5px; }
 .summary-items-list::-webkit-scrollbar-thumb { background: #bbb; border-radius: 4px; }
-.summary-row { display: flex; justify-content: space-between; margin-bottom: 15px; color: #333; font-size: 1.05rem; }
-.summary-total-row { display: flex; justify-content: space-between; font-size: 1.25rem; margin-top: 20px; }
+.summary-row { display: flex; justify-content: space-between; margin-bottom: 15px; color: #333; font-size: 1.1rem; }
+.summary-total-row { display: flex; justify-content: space-between; font-size: 1.5rem; margin-top: 25px; }
 
 /* FOOTER INFERIOR (Paso 1) */
 .bottom-section { width: 100%; padding-bottom: 30px; margin-top: auto; }
@@ -351,5 +565,4 @@ const removeItem = (id: string) => {
 .back-arrow:hover { opacity: 0.7; }
 .continue-btn { background-color: #776CBE; color: white; border: none; border-radius: 6px; padding: 10px 24px; font-size: 1.1rem; cursor: pointer; font-family: inherit; }
 .continue-btn:disabled { opacity: 0.6; cursor: default; }
-
 </style>

@@ -88,7 +88,8 @@ const login = async () => {
     alert("Datos incorrectos en la tabla. Verifica correo y clave.");
   } else {
     console.log("¡Usuario encontrado en la tabla!", data);
-    // Cambia la línea del router.push por esta:
+    // Guardamos el usuario en localStorage para que otras vistas lo reconozcan
+    localStorage.setItem('mikrokosmos_user', JSON.stringify(data));
     router.push({ name: 'home' })
   }
 }

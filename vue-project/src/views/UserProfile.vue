@@ -19,38 +19,32 @@ const toggleSidebar = () => {
   sidebarExpandido.value = !sidebarExpandido.value
 }
 
-// --- LÓGICA DE SUPABASE ---
+// --- LÓGICA DE SESIÓN ---
 const verificarSesion = async () => {
   try {
     cargando.value = true
     
-    // En Supabase Auth con REST, la sesión suele persistir en localStorage bajo 'sb-token'
-    // Pero lo ideal es usar el cliente oficial. Aquí simulamos la validación:
-    const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      method: 'GET',
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${localStorage.getItem('supabase.auth.token') || ''}`, 
-      }
-    })
-
-    if (!res.ok) {
-      // Si no hay sesión válida, redirigir al login
+    // Obtenemos el usuario guardado en el Login
+    const userLocal = localStorage.getItem('mikrokosmos_user')
+    
+    if (!userLocal) {
+      // Si no hay usuario en el storage, redirigir al login
       router.push('/login')
       return
     }
 
-    usuario.value = await res.json()
+    usuario.value = JSON.parse(userLocal)
   } catch (error) {
-    console.error("Error de autenticación:", error)
+    console.error("Error al cargar perfil:", error)
+    router.push('/login')
   } finally {
     cargando.value = false
   }
 }
 
 const handleLogout = async () => {
-  // Lógica para limpiar el storage y redirigir
-  localStorage.removeItem('supabase.auth.token')
+  // Limpiamos el storage y redirigimos
+  localStorage.removeItem('mikrokosmos_user')
   router.push('/login')
 }
 
@@ -83,7 +77,7 @@ onMounted(() => {
             </div>
 
             <h2 class="user-role">Gestor de Ventas</h2>
-            <p class="user-email">{{ usuario?.email }}</p>
+            <p class="user-email">{{ usuario?.correo }}</p>
 
             <div class="options-list">
               <button class="btn-menu">Mis pedidos</button>
