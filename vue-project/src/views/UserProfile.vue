@@ -109,7 +109,6 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  border-left: 2px solid #00BFFF; /* El borde cian que tienes */
   background-color: #fff;
   overflow-y: auto;
   align-items: center; /* Centra el perfil horizontalmente */

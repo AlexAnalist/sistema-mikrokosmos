@@ -37,7 +37,7 @@ const secciones = ref<Seccion[]>([
     ] 
   },
   { nombre: 'Sagas/Estuches', abierto: false, opciones: ['Sagas completas', 'Estuches regalo'] },
-  { nombre: 'Accesorios literarios', abierto: false, opciones: ['Separadores', 'Velas', 'Fundas'] },
+  { nombre: 'Accesorios literarios', abierto: false, opciones: ['Papelería', 'Velas', 'Complementos'] },
   { nombre: 'Club Mikrokosmos', abierto: false, opciones: ['Información', 'Inscribirse'] }
 ])
 
@@ -51,7 +51,7 @@ const toggleSeccion = (index: number) => {
 <template>
   <div class="sidebar-wrapper">
     <div class="hamburger-fixed-box" @click="emit('toggle-menu')">
-      <Menu :class="['hamburger-icon', { 'is-white': !isOpen }]" />
+      <Menu class="hamburger-icon" />
     </div>
 
     <aside class="sidebar-content" :class="{ 'closed': !isOpen }">
@@ -105,19 +105,13 @@ const toggleSeccion = (index: number) => {
   width: 100%;
   height: 100%;
   color: #6A5ACD; /* Morado original */
-  transition: color 0.3s ease;
-}
-
-.hamburger-icon.is-white {
-  color: white; /* Color blanco al retraer */
-  filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.2));
 }
 
 /* --- ESTILOS CONTENIDO (DISEÑO RESTAURADO) --- */
 .sidebar-content {
   width: 280px;
-  background-color: white;
-  border-right: 1px solid #eee;
+  background-color: #F5F5F5; /* Gris muy claro solicitado */
+  border-right: 1px solid #E0E0E0; /* Borde sutil gris */
   padding-top: 70px; /* Espacio para que no tape la hamburguesa */
   transition: width 0.3s ease, transform 0.3s ease;
   overflow-x: hidden;
@@ -158,10 +152,11 @@ const toggleSeccion = (index: number) => {
   font-weight: 500;
 }
 
-/* SUBMENÚ: Fondo blanco y sangría solicitado */
-.submenu {
-  background-color: white;
-  padding: 10px 20px 15px 30px; /* Padding izquierdo da la sangría */
+/* SUBMENÚ: Forzamos la sangría con mayor especificidad para ganar al reset global */
+.menu-nav ul.submenu {
+  background-color: #F5F5F5;
+  padding: 10px 20px 15px 50px; 
+  display: block;
 }
 
 /* EFECTO HOVER RESTAURADO */

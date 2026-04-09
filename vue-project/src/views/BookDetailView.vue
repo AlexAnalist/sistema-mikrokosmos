@@ -287,8 +287,6 @@ onMounted(async () => {
 
   background-color: #fff;
 
-  border: 3px solid #00BFFF; /* Borde cian característico */
-
   overflow-y: auto;
 
 }

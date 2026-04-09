@@ -159,7 +159,6 @@ onMounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  border-left: 2px solid #00BFFF; 
   background-color: #fff;
   overflow-y: auto;
 }
