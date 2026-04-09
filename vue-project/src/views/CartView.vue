@@ -69,6 +69,7 @@
             <div v-if="currentStep === 1" class="cart-items-column">
               <h2 class="column-title">Tus productos</h2>
               <div v-for="item in cartStore.items" :key="item.id_producto" class="item-card">
+                <img :src="item.imagen_url" alt="Portada del libro" class="cart-item-image" />
                 <div class="item-info">
                   <p><strong>Título:</strong> {{ item.titulo }}</p>
                   <p><strong>Precio:</strong> ${{ item.precio.toFixed(2) }}</p>
@@ -201,7 +202,7 @@
               <div class="summary-items-list">
                 <div v-for="item in cartStore.items" :key="'sum-'+item.id_producto" class="summary-row">
                   <span>{{ item.titulo }} (x{{ item.cantidad }})</span>
-                  <span>${{ (item.precio * item.quantity).toFixed(2) }}</span>
+                  <span>${{ (item.precio * item.cantidad).toFixed(2) }}</span>
                 </div>
               </div>
               
@@ -427,7 +428,9 @@ const removeItem = (id: number) => {
 /* PASO 1 COMPONENTES */
 .cart-items-column { display: flex; flex-direction: column; gap: 15px; width: 100%; }
 .column-title { font-size: 1.2rem; margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
-.item-card { border: 1px solid #ccc; border-radius: 8px; padding: 15px; background-color: #fafafa; }
+.item-card { border: 1px solid #ccc; border-radius: 8px; padding: 15px; background-color: #fafafa; display: flex; gap: 20px; align-items: flex-start; }
+.cart-item-image { width: 80px; height: 120px; object-fit: contain; border-radius: 4px; flex-shrink: 0; }
+.item-info { flex: 1; display: flex; flex-direction: column; gap: 5px; }
 .quantity-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .qty-btn { background: #776CBE; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; }
 .delete-btn { margin-left: auto; background: transparent; color: crimson; border: 1px solid crimson; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
