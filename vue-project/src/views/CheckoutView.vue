@@ -46,7 +46,13 @@
 
                   <div class="form-group-custom">
                     <label class="input-label-local hina-mincho-font">Dirección</label>
-                    <input type="text" class="form-input-flat" placeholder="Dirección" v-model="formData.direccion" />
+                    <input 
+                      type="text" 
+                      class="form-input-flat" 
+                      placeholder="Dirección" 
+                      v-model="formData.direccion" 
+                      :readonly="localOption === 'sede'"
+                    />
                   </div>
 
                   <div class="type-display">
@@ -87,9 +93,9 @@
             <h2 class="summary-card-title hina-mincho-font">Resumen de compra</h2>
             <div class="dashed-divider"></div>
             <div class="summary-items-list">
-              <div v-for="item in cart" :key="item.id" class="summary-row">
-                <span>{{ item.title }} (x{{ item.quantity }})</span>
-                <span>${{ (item.price * item.quantity).toFixed(2) }}</span>
+              <div v-for="item in cart" :key="item.id_producto" class="summary-row">
+                <span>{{ item.titulo }} (x{{ item.cantidad }})</span>
+                <span>${{ (item.precio * item.cantidad).toFixed(2) }}</span>
               </div>
             </div>
             <div class="dashed-divider"></div>
@@ -105,31 +111,146 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import TheHeader from '@/components/TheHeader.vue'
+import { supabase } from '@/supabase'
+import { useCartStore } from '@/stores/cart'
+
+const router = useRouter()
+const cartStore = useCartStore()
 
 const deliveryType = ref('local') // Seteamos local por defecto para que el usuario lo vea
 const localOption = ref('sede')
 const isProcessing = ref(false)
-const formData = ref({ direccion: '' })
+const formData = ref({ direccion: 'Sede principal' })
 
-// Datos mock para el ticket
-const cart = ref([
-  { id: '1', title: 'Cien años de soledad', price: 25.0, quantity: 1 },
-  { id: '2', title: 'Rayuela', price: 18.5, quantity: 1 }
-])
-
-const total_carrito = computed(() => {
-  return cart.value.reduce((total, item) => total + (item.price * item.quantity), 0)
+// Watcher para automatizar la dirección
+watch(localOption, (newVal) => {
+  if (newVal === 'sede') {
+    formData.value.direccion = 'Sede principal'
+  } else {
+    formData.value.direccion = ''
+  }
 })
 
-const processDelivery = () => {
-  isProcessing.value = true
-  setTimeout(() => {
-    isProcessing.value = false
-    alert("Envío registrado con éxito.")
-  }, 1500)
-}
+// Sincronizando con el estado real del carrito de Pinia
+const cart = computed(() => cartStore.items)
+
+const total_carrito = computed(() => {
+  return cartStore.totalPrecio
+})
+
+const processDelivery = async () => {
+  // 1. Validación de frontend
+  if (!deliveryType.value) {
+    alert("Por favor, seleccione un tipo de entrega.");
+    return;
+  }
+
+  // Si es entrega local, la dirección es obligatoria
+  if (deliveryType.value === 'local' && !formData.value.direccion.trim()) {
+    alert("Por favor, ingrese la dirección de entrega.");
+    return;
+  }
+
+  isProcessing.value = true;
+
+  const tipoEntregaLimpio = deliveryType.value === 'local' ? 'Local' : 'Nacional';
+  const direccionFinal = formData.value.direccion || 'Sin dirección';
+
+  try {
+    // 2. Obtener la sesión actual de Auth y luego el 'id_usuario' entero en la tabla 'usuario'
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      throw new Error("Debes iniciar sesión para procesar un pedido.");
+    }
+    
+    // Consulta al usuario mediante el correo mapeado en Auth
+    const { data: usuarioData, error: userDbError } = await supabase
+      .from('usuario')
+      .select('id_usuario, nombre')
+      .eq('correo', authData.user.email)
+      .single();
+      
+    if (userDbError || !usuarioData) {
+      throw new Error("No se encontró el perfil numérico del usuario en la base de datos.");
+    }
+
+    const { id_usuario, nombre } = usuarioData;
+
+    // 3. PRIMERA INSERCIÓN: Tabla 'pedido'
+    const { data: pedidoData, error: pedidoError } = await supabase
+      .from('pedido')
+      .insert([{
+        id_usuario: id_usuario,
+        estado_pago: 'Pendiente',
+        estado_envio: 'Pendiente'
+      }])
+      .select('id_pedido')
+      .single();
+
+    if (pedidoError) throw pedidoError;
+    const { id_pedido } = pedidoData;
+
+    // 4. SEGUNDA INSERCIÓN: Tabla 'detalles_pedidos'
+    const detallesData = cart.value.map(item => ({
+      id_pedido: id_pedido,
+      id_productos: Number(item.id_producto), 
+      cantidad: Number(item.cantidad),
+      precio_venta: Number(item.precio)
+    }));
+
+    const { error: detallesError } = await supabase
+      .from('detalles_pedidos')
+      .insert(detallesData);
+
+    if (detallesError) throw detallesError;
+
+    // 5. TERCERA INSERCIÓN: Tabla 'entrega'
+    const { error: entregaError } = await supabase
+      .from('entrega')
+      .insert([{
+        id_pedido: id_pedido,
+        tipo_entrega: tipoEntregaLimpio,
+        direccion_envio: direccionFinal
+      }]);
+
+    if (entregaError) throw entregaError;
+
+    // Si todo salió bien
+    console.log("Transacción exitosa de Supabase completa.");
+
+  } catch (error: any) {
+    console.error('Detalles del error de BD:', JSON.stringify(error, null, 2));
+    console.error('Error durante la transacción Supabase:', error);
+    // Quitamos alert() para no frenar la redirección
+  } finally {
+    isProcessing.value = false;
+
+    // 6. REDIRECCIÓN A WHATSAPP
+    const listaLibros = cart.value
+      .map(item => `${item.titulo} (x${item.cantidad})`)
+      .join(', ');
+      
+    const totalVenta = `$${total_carrito.value.toFixed(2)}`;
+    
+    // Extraemos nombre temporal por si la BD arroja error
+    let nombreCliente = "Cliente";
+    const userManual = JSON.parse(localStorage.getItem('mikrokosmos_user') || '{}');
+    if (userManual.nombre) nombreCliente = userManual.nombre;
+    
+    const mensaje = `Hola Mikrokosmos, mi nombre es ${nombreCliente}, mi pedido es: ${listaLibros} con un total de ${totalVenta}. Mi entrega es ${tipoEntregaLimpio} en la dirección ${direccionFinal}`;
+
+    const encodedMessage = encodeURIComponent(mensaje);
+    const whatsappUrl = `https://wa.me/584247846963?text=${encodedMessage}`;
+    
+    // Se abre WhatsApp inmediatamente
+    window.open(whatsappUrl, '_blank');
+    cartStore.vaciarCarrito();
+    router.push('/');
+  }
+};
 </script>
 
 <style scoped>

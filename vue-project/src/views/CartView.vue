@@ -124,7 +124,13 @@
 
                       <div class="form-group-custom">
                         <label class="input-label-local hina-mincho-font">Dirección</label>
-                        <input type="text" class="form-input-flat" placeholder="Dirección" v-model="formData.direccion" />
+                        <input 
+                          type="text" 
+                          class="form-input-flat" 
+                          placeholder="Dirección" 
+                          v-model="formData.direccion" 
+                          :readonly="localOption === 'sede'"
+                        />
                       </div>
 
                       <div class="type-display">
@@ -243,7 +249,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import TheHeader from '@/components/TheHeader.vue'
 import { useCartStore } from '@/stores/cart'
@@ -264,7 +270,16 @@ const currentStep = ref(1) // 1 = Carrito, 2 = Formulario de Envío
 const deliveryType = ref('local')
 const localOption = ref('sede')
 const isProcessing = ref(false)
-const formData = ref({ direccion: '' })
+const formData = ref({ direccion: 'Sede principal' })
+
+// Watcher para automatizar la dirección
+watch(localOption, (newVal) => {
+  if (newVal === 'sede') {
+    formData.value.direccion = 'Sede principal'
+  } else {
+    formData.value.direccion = ''
+  }
+})
 
 // Datos para Envío Nacional
 const formDataNational = ref({
@@ -363,20 +378,48 @@ const confirmarPedidoSupabase = async () => {
   const { data: { session } } = await supabase.auth.getSession()
   const userManual = JSON.parse(localStorage.getItem('mikrokosmos_user') || '{}')
   
-  // El ID del usuario puede venir de Supabase Auth o de la tabla manual
-  const userId = session?.user.id || userManual.id_usuario
+  // Obtenemos el id_usuario (asumiendo que es el entero de la tabla usuario)
+  let userId = userManual.id_usuario;
 
-  if (!userId) throw new Error("No hay usuario identificado")
+  // Si no está en el localStorage, intentamos buscarlo en la DB usando el correo de la sesión
+  if (!userId && session?.user?.email) {
+    const { data: userData } = await supabase
+      .from('usuario')
+      .select('id_usuario')
+      .eq('correo', session.user.email)
+      .single();
+    userId = userData?.id_usuario;
+  }
 
+  if (!userId) throw new Error("No se pudo identificar al usuario en la base de datos.");
+
+  // 1. Crear el Pedido primero para obtener el id_pedido
+  const { data: pedidoData, error: pedidoError } = await supabase
+    .from('pedido')
+    .insert([{
+      id_usuario: userId,
+      estado_pago: 'Pendiente',
+      estado_envio: 'Pendiente'
+    }])
+    .select('id_pedido')
+    .single();
+
+  if (pedidoError) throw pedidoError;
+  const id_pedido = pedidoData.id_pedido;
+
+  // 2. Insertar en detalles_pedidos con el mapeo correcto
   const inserts = cartStore.items.map(item => ({
+    id_pedido: id_pedido,
     id_productos: item.id_producto,
-    id_usuario: userId,
     cantidad: item.cantidad,
-    // Puedes añadir más campos si tu tabla productos_pedidos lo requiere
+    precio_venta: item.precio
   }))
 
-  const { error } = await supabase.from('productos_pedidos').insert(inserts)
-  if (error) throw error
+  const { error: detallesError } = await supabase
+    .from('detalles_pedidos')
+    .insert(inserts)
+
+  if (detallesError) throw detallesError
 }
 
 const updateQuantity = (id: number, delta: number) => {
