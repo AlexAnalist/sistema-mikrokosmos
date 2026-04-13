@@ -25,84 +25,96 @@ const fetchPedidos = async () => {
   try {
     cargando.value = true
     const userLocal = localStorage.getItem('mikrokosmos_user')
-    
-    if (!userLocal) {
-      router.push('/login')
-      return
-    }
+    if (!userLocal) { return router.push('/login') }
 
     const { id_usuario } = JSON.parse(userLocal)
-    
-    if (!id_usuario) {
-      router.push('/login')
-      return
-    }
+    if (!id_usuario) { return router.push('/login') }
 
-    // Requerimiento 1: Consulta con Join Explícito para evitar PGRST200
-    // Usamos producto:id_productos para mapear la relación por la columna id_productos
-    const { data, error } = await supabase
+    // --- ESTRATEGIA: FETCH POR SEPARADO (CERO JOINS) ---
+
+    // 1. Obtener Pedidos (Cabecera)
+    const { data: rawPedidos, error: errPed } = await supabase
       .from('pedido')
-      .select(`
-        id_pedido,
-        fecha,
-        estado_pago,
-        estado_envio,
-        detalles_pedidos (
-          cantidad,
-          precio_venta,
-          producto:id_productos (
-            nombre,
-            libro_detalles (
-              genero,
-              autor
-            )
-          )
-        )
-      `)
+      .select('id_pedido, fecha, estado_pago, estado_envio')
       .eq('id_usuario', id_usuario)
 
-    if (error) {
-      console.error("DEBUG: Error completo de Supabase:", error)
-      // Requerimiento 3: Fallback de Mock Data si la consulta falla
+    if (errPed || !rawPedidos || rawPedidos.length === 0) {
+      if (errPed) console.error("Error en tabla pedido:", errPed)
       generarMockData()
       return
     }
 
-    // Requerimiento 2: Mapeo de datos con manejo de nulos
-    const ordenesAplanadas = (data || []).map(pedido => {
+    const pedidoIds = rawPedidos.map(p => p.id_pedido)
+
+    // 2. Obtener Detalles de todos esos pedidos
+    const { data: rawDetalles, error: errDet } = await supabase
+      .from('detalles_pedidos')
+      .select('id_pedido, id_productos, cantidad, precio_venta')
+      .in('id_pedido', pedidoIds)
+
+    if (errDet || !rawDetalles) {
+      console.error("Error en detalles_pedidos:", errDet)
+      generarMockData()
+      return
+    }
+
+    const productoIds = Array.from(new Set(rawDetalles.map(d => d.id_productos)))
+
+    // 3. Obtener Productos (Info básica)
+    const { data: rawProductos, error: errProd } = await supabase
+      .from('producto')
+      .select('id_productos, nombre')
+      .in('id_productos', productoIds)
+
+    // 4. Obtener Libro Detalles (Géneros/Autores)
+    const { data: rawLibros, error: errLib } = await supabase
+      .from('libro_detalles')
+      .select('id_productos, genero, autor')
+      .in('id_productos', productoIds)
+
+    // --- LÓGICA DE UNIÓN MANUAL (FRONTEND JOIN) ---
+    const pedidosFinales = rawPedidos.map(pedido => {
+      const susDetalles = rawDetalles.filter(d => d.id_pedido === pedido.id_pedido)
+      
       let totalPedido = 0
       const categoriasSet = new Set<string>()
 
-      pedido.detalles_pedidos.forEach((det: any) => {
+      const productosMapeados = susDetalles.map(det => {
         totalPedido += (det.cantidad || 0) * (det.precio_venta || 0)
         
-        // Manejo de libro_detalles (puede ser null para 'Articulos')
-        const infoProducto = det.producto
-        const ld = infoProducto?.libro_detalles
+        // Buscar el producto por id_productos
+        const prodInfo = rawProductos?.find(p => p.id_productos === det.id_productos)
         
-        if (ld) {
-          const infoLibro = Array.isArray(ld) ? ld[0] : ld
-          if (infoLibro && infoLibro.genero) {
-            categoriasSet.add(infoLibro.genero)
-          } else {
-            categoriasSet.add('General')
-          }
+        // Buscar detalles del libro si existen
+        const libroInfo = rawLibros?.find(l => l.id_productos === det.id_productos)
+        
+        if (libroInfo && libroInfo.genero) {
+          categoriasSet.add(libroInfo.genero)
         } else {
-          categoriasSet.add('Sin categoría')
+          categoriasSet.add('Artículos')
+        }
+
+        return {
+          nombre: prodInfo?.nombre || 'Cargando nombre...',
+          cantidad: det.cantidad,
+          precio_venta: det.precio_venta,
+          genero: libroInfo?.genero || 'Artículos'
         }
       })
 
       return {
         ...pedido,
         total: totalPedido,
-        categorias: Array.from(categoriasSet).length > 0 ? Array.from(categoriasSet) : ['General']
+        categorias: categoriasSet.size > 0 ? Array.from(categoriasSet) : ['General'],
+        productos: productosMapeados // Nombre solicitado por el usuario
       }
     })
 
-    pedidos.value = ordenesAplanadas
+    pedidos.value = pedidosFinales
+
   } catch (err) {
-    console.error("Error crítico en fetchPedidos:", err)
-    generarMockData() // Fallback final
+    console.error("Error en Fetch Manual:", err)
+    generarMockData()
   } finally {
     cargando.value = false
   }
@@ -121,16 +133,18 @@ const generarMockData = () => {
       estado_envio: 'En camino',
       total: 45000,
       categorias: ['Ficción', 'Artículos'],
-      detalles_pedidos: [
+      productos: [
         {
+          nombre: 'Cazadores de Sombras: Ciudad de Hueso',
           cantidad: 1,
           precio_venta: 25000,
-          producto: { nombre: 'El Principito - Edición Especial', libro_detalles: { genero: 'Ficción' } }
+          genero: 'Ficción'
         },
         {
+          nombre: 'Marca páginas Mikrokosmos',
           cantidad: 2,
           precio_venta: 10000,
-          producto: { nombre: 'Marca páginas Mikrokosmos', libro_detalles: null }
+          genero: 'Artículos'
         }
       ]
     }
@@ -242,7 +256,12 @@ onMounted(() => {
               </div>
 
               <div v-else class="orders-grid">
-                <div v-for="pedido in pedidosFiltrados" :key="pedido.id_pedido" class="order-card">
+                <div 
+                  v-for="pedido in pedidosFiltrados" 
+                  :key="pedido.id_pedido" 
+                  class="order-card clickable"
+                  @click="router.push(`/mis-pedidos/${pedido.id_pedido}`)"
+                >
                   <div class="order-header">
                     <span class="order-id">Pedido #{{ pedido.id_pedido }}</span>
                     <span class="order-date">{{ formatearFecha(pedido.fecha) }}</span>
@@ -250,11 +269,12 @@ onMounted(() => {
                   
                   <div class="order-body">
                     <div class="order-items">
-                      <div v-for="(det, idx) in pedido.detalles_pedidos" :key="idx" class="item">
+                      <div v-for="(producto, idx) in pedido.productos" :key="idx" class="item">
                         <div class="item-info">
-                          <span class="item-name">{{ det.producto?.nombre }}</span> <span class="item-qty">x{{ det.cantidad }}</span>
+                          <span class="item-name">{{ producto.nombre || 'Cargando...' }}</span> 
+                          <span class="item-qty">x{{ producto.cantidad }}</span>
                         </div>
-                        <span class="item-price">{{ formatearMoneda(det.precio_venta) }}</span>
+                        <span class="item-price">{{ formatearMoneda(producto.precio_venta) }}</span>
                       </div>
                     </div>
                   </div>
@@ -406,6 +426,9 @@ onMounted(() => {
   padding: 24px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.03);
   transition: transform 0.2s, box-shadow 0.2s;
+}
+.order-card.clickable {
+  cursor: pointer;
 }
 .order-card:hover {
   transform: translateY(-2px);
