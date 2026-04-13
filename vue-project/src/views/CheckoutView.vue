@@ -28,6 +28,13 @@
               <p class="delivery-box-subtitle hina-mincho-font">Recibe tu pedido en cualquier dirección del país.</p>
             </div>
             
+            <div class="autofill-container">
+              <button @click.prevent="fetchUltimaEntrega" class="btn-autofill" :disabled="isFetchingUltimaEntrega">
+                 {{ isFetchingUltimaEntrega ? 'Cargando...' : 'Usar datos del último envío' }}
+              </button>
+              <p v-if="mensajeFetch" class="fetch-message">{{ mensajeFetch }}</p>
+            </div>
+
             <div class="delivery-body">
               <div v-if="!deliveryType" class="unselected-state">
                 <p class="hina-mincho-font">Seleccione un Tipo de entrega para continuar.</p>
@@ -124,6 +131,74 @@ const deliveryType = ref('local') // Seteamos local por defecto para que el usua
 const localOption = ref('sede')
 const isProcessing = ref(false)
 const formData = ref({ direccion: 'Sede principal' })
+
+const isFetchingUltimaEntrega = ref(false)
+const mensajeFetch = ref('')
+
+const fetchUltimaEntrega = async () => {
+  isFetchingUltimaEntrega.value = true;
+  mensajeFetch.value = '';
+
+  try {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      mensajeFetch.value = 'Debes iniciar sesión para buscar envíos anteriores.';
+      return;
+    }
+
+    const { data: usuarioData, error: userDbError } = await supabase
+      .from('usuario')
+      .select('id_usuario')
+      .eq('correo', authData.user.email)
+      .single();
+
+    if (userDbError || !usuarioData) {
+      mensajeFetch.value = 'No se encontró el usuario.';
+      return;
+    }
+
+    const id_usuario = usuarioData.id_usuario;
+
+    const { data, error } = await supabase
+      .from('entrega')
+      .select('tipo_entrega, direccion_envio, fecha_creacion, pedido!inner(id_usuario)')
+      .eq('pedido.id_usuario', id_usuario)
+      .order('fecha_creacion', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !data) {
+      mensajeFetch.value = 'No se encontraron envíos anteriores.';
+    } else {
+      const { tipo_entrega, direccion_envio } = data;
+      
+      if (tipo_entrega === 'Local') {
+        deliveryType.value = 'local';
+        if (direccion_envio === 'Sede principal') {
+          localOption.value = 'sede';
+        } else {
+          localOption.value = 'delivery';
+          formData.value.direccion = direccion_envio;
+        }
+      } else if (tipo_entrega === 'Nacional') {
+        deliveryType.value = 'nacional';
+        formData.value.direccion = direccion_envio;
+      } else {
+        formData.value.direccion = direccion_envio || '';
+      }
+      
+      mensajeFetch.value = '¡Datos automáticos aplicados!';
+      setTimeout(() => { 
+        if (mensajeFetch.value === '¡Datos automáticos aplicados!') mensajeFetch.value = '' 
+      }, 3000);
+    }
+  } catch (error) {
+    console.error("Error al obtener la última entrega:", error);
+    mensajeFetch.value = 'No se encontraron envíos anteriores.';
+  } finally {
+    isFetchingUltimaEntrega.value = false;
+  }
+};
 
 // Watcher para automatizar la dirección
 watch(localOption, (newVal) => {
@@ -311,6 +386,47 @@ const processDelivery = async () => {
 
 .type-display { margin-bottom: 50px; }
 .type-display h2 { font-size: 3.2rem; color: #000; margin: 0; font-weight: normal; }
+
+/* Autofill Section */
+.autofill-container {
+  margin-bottom: 25px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.btn-autofill {
+  background-color: #9584c4;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-family: 'Hina Mincho', serif;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(149, 132, 196, 0.3);
+}
+
+.btn-autofill:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.btn-autofill:disabled {
+  background-color: #e0e0e0;
+  color: #a0a0a0;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.fetch-message {
+  font-family: 'Hina Mincho', serif;
+  font-size: 1.1rem;
+  color: #666;
+  margin: 0;
+}
 
 /* Footer de la caja */
 .delivery-footer { display: flex; align-items: center; gap: 20px; margin-top: auto; }

@@ -89,13 +89,25 @@
             <div v-else-if="currentStep === 2" class="checkout-form-column">
               <h3 class="delivery-title">Tipo de entrega</h3>
               
-              <div class="delivery-type-options">
-                <label class="radio-label">
-                  <input type="radio" v-model="deliveryType" value="local" /> Entrega local
-                </label>
-                <label class="radio-label">
-                  <input type="radio" v-model="deliveryType" value="nacional" /> Envio nacional
-                </label>
+              <div class="delivery-type-row">
+                <div class="delivery-type-options">
+                  <label class="radio-label">
+                    <input type="radio" v-model="deliveryType" value="local" /> Entrega local
+                  </label>
+                  <label class="radio-label">
+                    <input type="radio" v-model="deliveryType" value="nacional" /> Envio nacional
+                  </label>
+                </div>
+
+                <div class="autofill-mini-container">
+                  <button @click.prevent="fetchUltimaEntrega" class="btn-autofill-mini" :disabled="isFetchingUltimaEntrega">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span>{{ isFetchingUltimaEntrega ? 'Buscando...' : 'Reutilizar última dirección' }}</span>
+                  </button>
+                  <transition name="fade">
+                    <p v-if="mensajeFetch" class="fetch-message-mini">{{ mensajeFetch }}</p>
+                  </transition>
+                </div>
               </div>
               
               <div class="delivery-container">
@@ -316,6 +328,109 @@ const ciudadesFiltradas = computed(() => {
   return ciudadesPorEstado[formDataNational.value.estado] || ["Cualquier ciudad"]
 })
 
+const isFetchingUltimaEntrega = ref(false)
+const mensajeFetch = ref('')
+
+const fetchUltimaEntrega = async () => {
+  isFetchingUltimaEntrega.value = true;
+  mensajeFetch.value = '';
+
+  const clearMessage = () => {
+    setTimeout(() => { mensajeFetch.value = '' }, 2000); // 2 segundos según instrucción
+  }
+
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const userManual = JSON.parse(localStorage.getItem('mikrokosmos_user') || '{}');
+    
+    let userId = userManual.id_usuario;
+    if (!userId && session?.user?.email) {
+      const { data: userData } = await supabase
+        .from('usuario')
+        .select('id_usuario')
+        .eq('correo', session.user.email)
+        .single();
+      userId = userData?.id_usuario;
+    }
+
+    if (!userId) {
+      mensajeFetch.value = 'Inicia sesión primero';
+      clearMessage();
+      return;
+    }
+
+    // PASO 1 (ID Pedido): .maybeSingle() para evitar 406 en pedidos también
+    const { data: pedidoData, error: pedidoError } = await supabase
+      .from('pedido')
+      .select('id_pedido')
+      .eq('id_usuario', userId)
+      .order('id_pedido', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (pedidoError || !pedidoData) {
+      mensajeFetch.value = 'No hay historial disponible';
+      clearMessage();
+      return;
+    }
+
+    // PASO 2 (Consulta Plana): Sin order() ni limit()
+    const { data: entregaData, error: entregaError } = await supabase
+      .from('entrega')
+      .select('*')
+      .eq('id_pedido', pedidoData.id_pedido)
+      .maybeSingle();
+
+    if (entregaError || !entregaData) {
+      mensajeFetch.value = 'No hay historial disponible';
+      clearMessage();
+    } else {
+      const { 
+        tipo_entrega, 
+        direccion_envio, 
+        empresa_envio, 
+        estado_envio_nacional, 
+        ciudad_envio,
+        tipo_direccion_envio
+      } = entregaData;
+      
+      if (tipo_entrega === 'Local') {
+        deliveryType.value = 'local';
+        
+        // Mapeo tipo_direccion_envio ('Recoger en sede' -> 'sede' / 'Delivery' -> 'delivery')
+        if (tipo_direccion_envio && tipo_direccion_envio.toLowerCase().includes('sede')) {
+          localOption.value = 'sede';
+        } else {
+          localOption.value = 'delivery';
+        }
+        
+        // Campo de texto
+        formData.value.direccion = direccion_envio || '';
+        
+      } else if (tipo_entrega === 'Nacional') {
+        deliveryType.value = 'nacional';
+        
+        // Selectores
+        if (empresa_envio) formDataNational.value.empresa = empresa_envio.toLowerCase();
+        if (estado_envio_nacional) formDataNational.value.estado = estado_envio_nacional;
+        if (ciudad_envio) formDataNational.value.ciudad = ciudad_envio;
+        
+        // Campo de texto
+        formDataNational.value.direccionAgencia = direccion_envio || '';
+      }
+      
+      mensajeFetch.value = '¡Datos aplicados!';
+      clearMessage();
+    }
+  } catch (error) {
+    console.error("Error al obtener la última entrega:", error);
+    mensajeFetch.value = 'No hay historial disponible';
+    clearMessage();
+  } finally {
+    isFetchingUltimaEntrega.value = false;
+  }
+};
+
 const isFormValid = computed(() => {
   if (deliveryType.value === 'local') {
     return !!formData.value.direccion && !!localOption.value
@@ -480,9 +595,68 @@ const removeItem = (id: number) => {
 
 /* PASO 2 COMPONENTES (Caja de Checkout) */
 .checkout-form-column { width: 100%; display: flex; flex-direction: column; animation: fadeIn 0.3s ease; }
-.delivery-title { font-family: 'Hina Mincho', serif; font-size: 1.8rem; font-weight: normal; margin-bottom: 25px; padding-left: 5px; }
-.delivery-type-options { display: flex; gap: 35px; margin-bottom: 30px; padding-left: 10px; }
-.radio-label { display: flex; align-items: center; gap: 10px; font-size: 1.2rem; cursor: pointer; font-family: 'Hina Mincho', serif; color: #333; }
+.delivery-type-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  padding-right: 15px;
+}
+
+.delivery-type-options { 
+  display: flex; 
+  gap: 35px; 
+  padding-left: 10px; 
+}
+
+.autofill-mini-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-autofill-mini {
+  background-color: #9584c4;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(149, 132, 196, 0.2);
+}
+
+.btn-autofill-mini:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.btn-autofill-mini:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.fetch-message-mini {
+  font-family: 'Hina Mincho', serif;
+  font-size: 0.85rem;
+  color: #9584c4;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.5s;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
 
 .delivery-container { 
   border: 1.5px solid #d1d1d1; 
