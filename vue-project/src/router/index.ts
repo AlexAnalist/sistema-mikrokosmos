@@ -24,6 +24,8 @@ const router = createRouter({
     { path: '/carrito', name: 'cart', component: CartView },
     { path: '/checkout', name: 'checkout', component: CheckoutView },
     { path: '/perfil', name: 'profile', component: UserProfile }, 
+    { path: '/editar-perfil', name: 'edit-profile', component: () => import('../views/EditProfileView.vue') },
+    { path: '/mis-pedidos', name: 'my-orders', component: () => import('../views/MyOrdersView.vue') },
     { path: '/propietario', name: 'propietario', component: () => import('../views/PropietarioMasterView.vue')},
     { path: '/gestor', name: 'gestor', component: () => import('../views/GestorMasterView.vue') },
     { path: '/admin/catalogo', name: 'admin-catalogo', component: () => import('../views/AdminCatalogView.vue') }
