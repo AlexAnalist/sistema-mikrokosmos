@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import TheHeader from '@/components/TheHeader.vue'
 import TheSidebar from '@/components/TheSideBar.vue'
 import TheFooter from '@/components/TheFooter.vue'
@@ -10,28 +10,27 @@ import { useCartStore } from '@/stores/cart'
 
 const cartStore = useCartStore()
 const router = useRouter()
+const route = useRoute()
 
-// 1. Interfaz Híbrida: Acoplada a tu SQL (producto + libro_detalles + articulo_detalles)
+// 1. Interfaces Estrictas SQL
+interface LibroDetalles {
+  id_productos: number;
+  autor: string;
+  editorial: string;
+  sinopsis: string;
+  n_paginas: number;
+}
+
 interface LibroDetalle {
   id_productos: number;
   nombre: string;
   precio: number;
   tipo_producto: 'Libro' | 'Articulo';
-  estrellas?: number;
-
-  // Campos de Libro
   autor?: string;
   editorial?: string;
   sinopsis?: string;
   n_paginas?: number | string;
   tipo_tapa?: string;
-
-  // Campos de Artículo
-  descripcion?: string;
-  categoria?: string;
-  peso?: number | string;
-  color?: string;
-
   dimensiones?: string;
 }
 
@@ -113,7 +112,8 @@ const obtenerDetalles = async () => {
     const API_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     const query = 'select=*,libro_detalles(*),articulo_detalles(*),producto_imagenes(url_imagen)';
-    const endpoint = `${SUPABASE_URL}/producto?id_productos=eq.${props.id}&${query}`;
+    const productId = Number(props.id);
+    const endpoint = `${SUPABASE_URL}/producto?id_productos=eq.${productId}&${query}`;
 
     const res = await fetch(endpoint, {
       method: 'GET',
@@ -130,17 +130,16 @@ const obtenerDetalles = async () => {
     if (data && data.length > 0) {
       const p = data[0];
       const esLibro = p.tipo_producto === 'Libro';
-      const dL = p.libro_detalles;
-      const dA = p.articulo_detalles;
+      const dL = p.libro_detalles?.[0] || p.libro_detalles;
+      const dA = p.articulo_detalles?.[0] || p.articulo_detalles;
 
       // Mapeo dinámico para que el HTML funcione con ambos tipos
       libro.value = {
         id_productos: p.id_productos,
         nombre: p.nombre,
-        precio: Number(p.precio), // Corregido el error de tipo string -> number
+        precio: Number(p.precio),
         tipo_producto: p.tipo_producto as 'Libro' | 'Articulo',
 
-        // Lógica para que el diseño no se rompa si es un artículo
         autor: esLibro ? (dL?.autor || 'Autor desconocido') : (dA?.categoria || 'Accesorio'),
         editorial: esLibro ? (dL?.editorial || 'S/E') : 'Mikrokosmos Artículos',
         sinopsis: esLibro ? (dL?.sinopsis || 'Sin sinopsis.') : (dA?.descripcion || 'Sin descripción.'),
@@ -188,7 +187,6 @@ const handleAddToCart = async () => {
 }
 
 onMounted(async () => {
-  // Ejecutamos ambas para asegurar que la página se llene completa
   await obtenerDetalles();
   await obtenerComentarios();
 });
@@ -208,7 +206,7 @@ onMounted(async () => {
           
           <div class="left-column">
             <div class="main-image-wrapper">
-              <img :src="imagenesProducto[imagenActualIndex]" :alt="libro.nombre" class="product-image" />
+              <img :src="imagenesProducto[imagenActualIndex]" :alt="libro?.nombre" class="product-image" />
               <div v-if="imagenesProducto.length > 1" class="carousel-dots">
                 <span 
                   v-for="(_, index) in imagenesProducto" 
@@ -220,7 +218,7 @@ onMounted(async () => {
             </div>
 
             <div class="rating-section">
-              <h3>Reseñas</h3>
+              <h3 class="hina-mincho-font">Reseñas</h3>
               <div class="stars">
                 <span class="rating-placeholder">☆☆☆☆☆</span>
               </div>
@@ -228,9 +226,9 @@ onMounted(async () => {
             </div>
 
             <div class="tech-specs">
-              <div class="spec-block"><span>{{ libro.n_paginas }} Páginas</span></div>
-              <div class="spec-block"><span>{{ libro.dimensiones }}</span></div>
-              <div class="spec-block"><span>{{ libro.tipo_tapa }}</span></div>
+              <div class="spec-block"><span>{{ libro?.n_paginas || 'N/A' }} Páginas</span></div>
+              <div class="spec-block"><span>{{ libro?.dimensiones || 'N/A' }}</span></div>
+              <div class="spec-block"><span>{{ libro?.tipo_tapa || 'S/E' }}</span></div>
               <div class="spec-block ship-info"><span>Envío entre 5 a 8 días</span></div>
             </div>
 
@@ -255,21 +253,21 @@ onMounted(async () => {
           </div>
 
           <div class="right-column">
-            <h1 class="product-title">{{ libro.nombre }}</h1>
+            <h1 class="product-title hina-mincho-font">{{ libro?.nombre }}</h1>
             
             <div class="main-meta">
               <p>
-                <span class="autor-text">{{ libro.autor }}</span> 
-                <span class="price">Precio {{ libro.precio }}$</span>
+                <span class="autor-text">{{ libro?.autor }}</span> 
+                <span class="price">Precio {{ libro?.precio }}$</span>
               </p>
-              <p class="editorial-text">{{ libro.editorial }}</p>
+              <p class="editorial-text">{{ libro?.editorial }}</p>
             </div>
 
             <div class="synopsis-section">
                 <p>
                     <strong>Sinopsis:</strong> 
                     <span :class="['sinopsis-texto', { 'truncado': !expandido }]">
-                      {{ libro.sinopsis }}
+                      {{ libro?.sinopsis || 'Cargando información...' }}
                     </span>
                 </p>
                 <button class="leer-mas-btn" @click="toggleLeerMas">
@@ -283,7 +281,7 @@ onMounted(async () => {
           </div>
 
         </div>
-        <div v-else>Producto no encontrado.</div>
+        <div v-else class="not-found hina-mincho-font">Producto no encontrado.</div>
       </main>
     </div>
 
@@ -292,232 +290,140 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+@import url('https://fonts.googleapis.com/css2?family=Hina+Mincho&family=Inter:wght@300;400;500;600&display=swap');
 
+.hina-mincho-font { font-family: 'Hina Mincho', serif; }
 
-
-
-
-.page-layout { display: flex; flex-direction: column; height: 100vh; }
-
+.page-layout { display: flex; flex-direction: column; min-height: 100vh; background: #fff; }
 .main-wrapper { display: flex; flex: 1; overflow: hidden; }
 
-
-
 .content-area {
-
   flex: 1;
-
   padding: 40px;
-
   background-color: #fff;
-
   overflow-y: auto;
-
 }
 
-.loader-placeholder { display: flex; justify-content: center; align-items: center; height: 100%; font-weight: bold; color: #6A5ACD; }
+.loader-placeholder { display: flex; justify-content: center; align-items: center; height: 100%; font-weight: bold; color: #6A5ACD; font-family: 'Hina Mincho', serif; font-size: 1.5rem; }
 
 .product-container {
-
   display: grid;
-
   grid-template-columns: 1fr 1fr;
-
   gap: 40px;
-
   max-width: 1100px;
-
   margin: 0 auto;
-
 }
-
-
 
 .synopsis-section {
-
   display: flex;
-
   flex-direction: column;
-
   gap: 10px;
-
   max-width: 100%;
-
 }
-
-
 
 .sinopsis-texto {
-
   display: block;
-
-  line-height: 1.5;
-
+  line-height: 1.6;
   transition: all 0.3s ease;
-
+  color: #444;
 }
-
-
-
-/* Corregido: Ahora el nombre coincide con el del template */
 
 .truncado {
-
   display: -webkit-box;
-
-  -webkit-line-clamp: 3;
-
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;  
-
   overflow: hidden;
-
   text-overflow: ellipsis;
-
 }
-
-
 
 .leer-mas-btn {
-
   align-self: flex-start;
-
-  background: #6A5ACD;
-
-  color: white;
-
-  border: none;
-
-  padding: 4px 12px;
-
+  background: transparent;
+  color: #6A5ACD;
+  border: 1px solid #6A5ACD;
+  padding: 5px 15px;
   border-radius: 20px;
-
   font-size: 0.85rem;
-
   font-weight: bold;
-
   cursor: pointer;
-
-  transition: background 0.3s;
-
+  transition: all 0.3s;
 }
-
-
 
 .leer-mas-btn:hover {
-
-  background: #9370DB;
-
+  background: #6A5ACD;
+  color: white;
 }
 
-
-
 /* IZQUIERDA */
-
 .main-image-wrapper {
-
   width: 100%;
-
-  max-height: 500px;
-  
   aspect-ratio: 1/1;
-
   background-color: #fff;
-
   display: flex;
-
   flex-direction: column;
-
   align-items: center;
-
   justify-content: center;
-
   position: relative;
-
-  border: 1px solid #eee;
-
-  border-radius: 8px;
-  
+  border: 1px solid #f0f0f0;
+  border-radius: 15px;
   overflow: hidden;
-
+  box-shadow: 0 10px 30px rgba(0,0,0,0.05);
 }
 
 .product-image { 
-  width: 100%; 
-  height: 100%; 
+  width: 90%; 
+  height: 90%; 
   object-fit: contain; 
 }
 
-.carousel-dots { position: absolute; bottom: 10px; display: flex; gap: 5px; }
-
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; cursor: pointer; }
-
+.carousel-dots { position: absolute; bottom: 15px; display: flex; gap: 8px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #ddd; cursor: pointer; transition: background 0.3s; }
 .dot.active { background: #6A5ACD; }
 
+.rating-section { display: flex; align-items: center; gap: 15px; margin: 20px 0; }
+.stars { color: #FFD700; font-size: 1.2rem; }
+.rankea-btn { background: #E6E6FA; color: #6A5ACD; border: none; padding: 6px 18px; border-radius: 8px; cursor: pointer; font-weight: 500; transition: background 0.3s; }
+.rankea-btn:hover { background: #dcdcf7; }
 
+.tech-specs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+.spec-block { background: #fdfdfd; padding: 12px; border: 1px solid #f0f0f0; border-radius: 10px; text-align: center; font-size: 0.9rem; color: #666; }
+.ship-info { background: #fdf7ff; border: 1px dashed #9584c4; color: #9584c4; }
 
-.rating-section { display: flex; align-items: center; gap: 10px; margin: 15px 0; }
+.comments-section { margin-top: 30px; display: flex; flex-direction: column; gap: 15px; }
+.comment-input-wrapper { display: flex; align-items: center; gap: 12px; border: 1px solid #eee; border-radius: 25px; padding: 8px 20px; background: #fafafa; }
+.comment-icon { color: #aaa; width: 18px; }
+.comment-input { border: none; flex: 1; outline: none; background: transparent; font-size: 0.95rem; }
 
-.rankea-btn { background: #9370DB; color: #fff; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer; }
-
-
-
-.tech-specs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-
-.spec-block { background: #E6E6FA; padding: 10px; border-radius: 5px; text-align: center; font-size: 0.9rem; color: #444; }
-
-.ship-info { background: #f8f8f8; border: 1px dashed #ccc; }
-
-
-
-.comments-section { margin-top: 20px; display: flex; flex-direction: column; gap: 20px; }
-
-.comment-input-wrapper { display: flex; align-items: center; gap: 10px; border: 1px solid #ddd; border-radius: 20px; padding: 5px 15px; margin-bottom: 10px; }
-
-.comment-input { border: none; flex: 1; outline: none; }
-
-.comments-list { display: flex; flex-direction: column; gap: 15px; }
-
-.comment-item { background: #F3F1FF; padding: 15px; border-radius: 12px; font-size: 0.9rem; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
-
-.comment-user { font-weight: bold; margin-right: 5px; }
-
-
+.comments-list { display: flex; flex-direction: column; gap: 12px; }
+.comment-item { background: #fff; padding: 15px; border: 1px solid #f5f5f5; border-radius: 12px; font-size: 0.9rem; }
+.comment-user { font-weight: 700; color: #333; margin-bottom: 4px; display: block; }
 
 /* DERECHA */
+.product-title { font-size: 2.8rem; font-weight: normal; line-height: 1.1; margin-bottom: 15px; color: #222; }
+.main-meta { margin-bottom: 25px; border-bottom: 1px solid #f0f0f0; padding-bottom: 20px; }
+.autor-text { font-size: 1.3rem; color: #666; font-style: italic; }
+.price { font-size: 2.2rem; font-weight: 700; color: #9584c4; float: right; font-family: 'Hina Mincho', serif; }
+.editorial-text { font-size: 1rem; color: #aaa; margin-top: 5px; text-transform: uppercase; letter-spacing: 1px; }
 
-.product-title { font-size: 2.2rem; font-weight: 800; line-height: 1.2; margin-bottom: 10px; }
-
-.main-meta { font-size: 1.1rem; margin-bottom: 20px; }
-
-.price { font-size: 1.8rem; font-weight: 900; float: right; }
-
-.synopsis-section { line-height: 1.5; color: #555; margin-bottom: 30px; }
-
-.leer-mas { background: none; border: none; color: #6A5ACD; font-weight: bold; cursor: pointer; }
-
-
-
+.action-section { margin-top: 40px; }
 .add-to-cart-btn {
-
   width: 100%;
-
-  background: #6A5ACD; /* Morado corporativo */
-
+  background: #9584c4;
   color: white;
-
   border: none;
-
-  padding: 15px;
-
+  padding: 18px;
   font-size: 1.4rem;
-
   font-weight: bold;
-
-  border-radius: 8px;
-
+  border-radius: 12px;
   cursor: pointer;
-
-  box-shadow: 0 4px 10px rgba(106, 90, 205, 0.2);
+  transition: all 0.3s;
+  box-shadow: 0 10px 20px rgba(149, 132, 196, 0.2);
 }
-/* ... (El resto de tus estilos .page-layout, .product-container, etc) */
+.add-to-cart-btn:hover { background: #7f6eac; transform: translateY(-2px); box-shadow: 0 15px 30px rgba(149, 132, 196, 0.3); }
+
+.not-found { text-align: center; padding: 100px; font-size: 2rem; color: #888; }
+
+@media (max-width: 900px) {
+  .product-container { grid-template-columns: 1fr; }
+}
 </style>

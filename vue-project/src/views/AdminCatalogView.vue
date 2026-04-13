@@ -15,17 +15,37 @@ import TheFooter from '@/components/TheFooter.vue'
 
 const router = useRouter()
 
+// --- INTERFACES ---
+interface Producto {
+  id_productos: number;
+  nombre: string;
+  descripcion?: string;
+  precio?: number | string;
+  tipo_producto?: string;
+}
+
+interface Banner {
+  imagen: string;
+  titulo: string;
+}
+
+interface UserSession {
+  email?: string;
+  id_rol?: number;
+  nombre?: string;
+}
+
 // --- ESTADO ---
 const sidebarOpen = ref(true)
 const tipoProducto = ref<'libro' | 'articulo'>('libro')
 const isAdmin = ref(false)
 
 // Búsqueda
-const listaProductos = ref<any[]>([])
+const listaProductos = ref<Producto[]>([])
 const terminoBusqueda = ref('')
 
-// Banners (Datos de DynamicBanner)
-const bannersData = ref([
+// Banners
+const bannersData = ref<Banner[]>([
   { imagen: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=1200", titulo: 'PREVENTA IMPERDIBLE*' },
   { imagen: "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?w=1200", titulo: 'ADÉNTRATE EN LA FANTASÍA' },
   { imagen: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=1200", titulo: 'TENDENCIAS DEL MES' }
@@ -38,20 +58,20 @@ const cargando = ref(false)
 
 // Campos del formulario
 const form = ref({
-  id_productos: null,
+  id_productos: null as number | null,
   titulo: '',
   autor: '',
   editorial: '',
   sinopsis: '',
   tipoEnvio: '',
-  precio: '',
-  paginas: 200,
-  dim_alto: '',
-  dim_ancho: '',
-  dim_largo: '',
+  precio: '' as string | number,
+  paginas: 200 as number | string,
+  dim_alto: '' as number | string,
+  dim_ancho: '' as number | string,
+  dim_largo: '' as number | string,
   tapa: 'Blanda',
   color: '',
-  weight: '',
+  weight: '' as number | string,
   categoria: 'Velas'
 })
 
@@ -69,12 +89,15 @@ const cargarProductos = async () => {
     const res = await fetch('https://qqzqtxfykfmauujsqgoy.supabase.co/rest/v1/producto?select=*', {
       headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
     })
-    if (res.ok) listaProductos.value = await res.json()
+    if (res.ok) {
+      const data = await res.json()
+      listaProductos.value = data as Producto[]
+    }
   } catch (e) { console.error(e) }
   finally { cargando.value = false }
 }
 
-const seleccionarProducto = (p: any) => {
+const seleccionarProducto = (p: Producto) => {
   form.value = {
     id_productos: p.id_productos,
     titulo: p.nombre,
@@ -106,10 +129,11 @@ const productosFiltrados = computed(() => {
 
 // --- VERIFICACIÓN DE ACCESO ---
 onMounted(() => {
-  const user = JSON.parse(localStorage.getItem('mikrokosmos_user') || '{}')
-  if (!user || (user.email !== 'admin@libreria.com' && user.id_rol !== 1)) {
+  const user = JSON.parse(localStorage.getItem('mikrokosmos_user') || '{}') as UserSession
+  if (user && (user.email === 'admin@libreria.com' || user.id_rol === 1)) {
     isAdmin.value = true 
   } else {
+    // Para propósitos de desarrollo dejamos que se vea pero podrías redirigir
     isAdmin.value = true
   }
 })
@@ -247,7 +271,7 @@ const prepareNuevoBanner = () => {
               <template v-else>
                 <div class="banner-section">
                   <p class="section-label">Selecciona un banner existente:</p>
-                  <div class="banner-preview-box">
+                  <div class="banner-preview-box" v-if="bannersData[indiceBannerActual]">
                     <img :src="bannersData[indiceBannerActual].imagen" class="banner-preview-img" />
                   </div>
                   <div class="carousel-dots-admin">
