@@ -3,6 +3,13 @@
     <h1 class="main-title">Empieza en<br />Mikrokosmos</h1>
 
     <div class="glass-card">
+      <!-- Banner de Notificación -->
+      <transition name="fade">
+        <div v-if="mensajeError" class="mikrokosmos-alert">
+          {{ mensajeError }}
+        </div>
+      </transition>
+
       <form @submit.prevent="register" class="auth-form">
         
         <AuthInput 
@@ -49,24 +56,51 @@ const router = useRouter()
 const email = ref('')
 const password = ref('')
 const nombre = ref('')
+const mensajeError = ref('')
+
+const mostrarError = (msg: string) => {
+  mensajeError.value = msg
+  setTimeout(() => {
+    mensajeError.value = ''
+  }, 4000)
+}
 
 const register = async () => {
   // Validación simple antes de enviar
   if (!email.value || !password.value || !nombre.value) {
-    alert("Por favor, completa todos los campos, panita.")
+    mostrarError("Por favor, completa todos los campos, panita.")
     return
   }
 
   try {
+    // 1. VALIDACIÓN PREVENTIVA (Frontend):
+    const { data: usuarioExistente } = await supabase
+      .from('usuario')
+      .select('correo')
+      .eq('correo', email.value)
+      .maybeSingle()
+
+    if (usuarioExistente) {
+      mostrarError("¡Ups! Este correo ya está registrado en Mikrokosmos. Intenta iniciar sesión.")
+      return
+    }
+
     // 2. Registro en el motor de Autenticación de Supabase
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: email.value,
       password: password.value,
     })
 
-    if (authError) throw authError
+    if (authError) {
+      // 3. MANEJO DE EXCEPCIONES (Backend):
+      if (authError.message.includes('already registered') || authError.status === 422) {
+        mostrarError("¡Ups! Este correo ya está registrado en Mikrokosmos. Intenta iniciar sesión.")
+        return
+      }
+      throw authError
+    }
 
-    // 3. Si el usuario se creó bien, guardamos sus datos en la tabla 'usuario'
+    // 4. Si el usuario se creó bien, guardamos sus datos en la tabla 'usuario'
     if (authData.user) {
       const { error: dbError } = await supabase
         .from('usuario')
@@ -74,18 +108,24 @@ const register = async () => {
           { 
             correo: email.value, 
             nombre: nombre.value, 
-            clave: password.value, // Guardamos la clave según tu esquema
-            rol: 'cliente'         // Asignamos el rol por defecto
+            clave: password.value, 
+            rol: 'cliente'         
           }
         ])
 
-      if (dbError) throw dbError
+      // Manejo de error de base de datos (Unique Constraint)
+      if (dbError) {
+        if (dbError.code === '23505') {
+          mostrarError("¡Ups! Este correo ya está registrado en Mikrokosmos. Intenta iniciar sesión.")
+          return
+        }
+        throw dbError
+      }
 
-      alert("¡Registro exitoso! Ya puedes iniciar sesión.")
-      router.push('/login') // Redirigimos al Login
+      router.push('/login') 
     }
   } catch (error: any) {
-    alert("Error: " + (error.message || "No se pudo completar el registro"))
+    mostrarError("Error: " + (error.message || "No se pudo completar el registro"))
     console.error(error)
   }
 }
@@ -204,5 +244,29 @@ const register = async () => {
 
 .primary-btn:hover {
   opacity: 0.85;
+}
+
+/* Estilo de Alertas Mikrokosmos */
+.mikrokosmos-alert {
+  position: absolute;
+  top: 20px;
+  width: 90%;
+  padding: 12px;
+  background-color: #9584c4;
+  color: white;
+  text-align: center;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.5s, transform 0.5s;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 </style>
