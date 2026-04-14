@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { supabase } from '@/supabase'
 import { 
   Plus, 
   Check, 
@@ -17,11 +18,13 @@ const router = useRouter()
 
 // --- INTERFACES ---
 interface Producto {
+  id_productosCol?: number; // Internal logic if needed, but DB uses id_productos
   id_productos: number;
   nombre: string;
   descripcion?: string;
   precio?: number | string;
   tipo_producto?: string;
+  url_imagen?: string;
 }
 
 interface Banner {
@@ -80,21 +83,31 @@ const toggleSidebar = () => {
 }
 
 // --- CONEXIÓN SUPABASE ---
-const supabaseKey = 'sb_publishable_URWKs3wjsKY0qg-GvXbHjg_CeLMSw25'
-
 const cargarProductos = async () => {
   cargando.value = true
   modoVista.value = 'busqueda'
   try {
-    const res = await fetch('https://qqzqtxfykfmauujsqgoy.supabase.co/rest/v1/producto?select=*', {
-      headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
-    })
-    if (res.ok) {
-      const data = await res.json()
-      listaProductos.value = data as Producto[]
+    const { data, error } = await supabase
+      .from('producto')
+      .select('id_productos, nombre, descripcion, precio, tipo_producto, producto_imagenes(url_imagen)')
+    
+    if (error) throw error
+    
+    if (data) {
+      listaProductos.value = data.map((p: any) => ({
+        id_productos: p.id_productos,
+        nombre: p.nombre,
+        descripcion: p.descripcion,
+        precio: p.precio,
+        tipo_producto: p.tipo_producto,
+        url_imagen: p.producto_imagenes?.[0]?.url_imagen || ''
+      })) as Producto[]
     }
-  } catch (e) { console.error(e) }
-  finally { cargando.value = false }
+  } catch (e) {
+    console.error("Error cargando productos:", e)
+  } finally {
+    cargando.value = false
+  }
 }
 
 const seleccionarProducto = (p: Producto) => {
@@ -138,38 +151,81 @@ onMounted(() => {
   }
 })
 
-const handleSave = () => {
+const handleSave = async () => {
   if (modoVista.value === 'banner') {
     alert('Banner guardado/actualizado (Simulación)')
     isCreandoBanner.value = false
     return
   }
-  let extraInfo = ''
-  if (tipoProducto.value === 'libro') {
-    extraInfo = `Dimensiones: ${form.value.dim_alto}x${form.value.dim_ancho}x${form.value.dim_largo} cm`
-  } else {
-    extraInfo = `Categoría: ${form.value.categoria}, Peso: ${form.value.weight}g`
+
+  cargando.value = true
+  try {
+    const formData = {
+      nombre: form.value.titulo,
+      descripcion: form.value.sinopsis,
+      precio: form.value.precio,
+      tipo_producto: tipoProducto.value === 'libro' ? 'Libro' : 'Articulo'
+    }
+
+    if (modoVista.value === 'edicion' && form.value.id_productos) {
+      // UPDATE
+      const { error } = await supabase
+        .from('producto')
+        .update(formData)
+        .eq('id_productos', form.value.id_productos)
+      
+      if (error) throw error
+      alert(`Producto actualizado correctamente.`)
+    } else {
+      // INSERT
+      const { data, error } = await supabase
+        .from('producto')
+        .insert([formData])
+        .select('id_productos')
+        .single()
+        
+      if (error) throw error
+      alert(`Producto creado correctamente con ID: ${data?.id_productos}`)
+    }
+    
+    modoVista.value = 'nuevo'
+    form.value = { ...form.value, titulo: '', sinopsis: '', precio: '', id_productos: null }
+  } catch (err: any) {
+    console.error("Error guardando producto:", err)
+    alert("Error al guardar: " + err.message)
+  } finally {
+    cargando.value = false
   }
-  
-  const accion = modoVista.value === 'edicion' ? 'actualizado' : 'guardado'
-  alert(`Simulación: ${tipoProducto.value.toUpperCase()} ${accion} localmente.\n${extraInfo}`)
-  console.log('Datos:', { tipo: tipoProducto.value, ...form.value })
-  modoVista.value = 'nuevo'
 }
 
-const handleDelete = () => {
-  if (confirm('¿Estás seguro de que deseas eliminar esto?')) {
+const handleDelete = async () => {
+  if (confirm('¿Estás seguro de que deseas eliminar este producto (y todas sus referencias)?')) {
     if (modoVista.value === 'banner') {
       alert('Banner eliminado (Simulación)')
       isCreandoBanner.value = false
       return
     }
-    form.value = {
-      id_productos: null, titulo: '', autor: '', editorial: '', sinopsis: '', 
-      tipoEnvio: '', precio: '', paginas: 200, dim_alto: '', dim_ancho: '', dim_largo: '', tapa: 'Blanda',
-      color: '', weight: '', categoria: 'Velas'
+
+    if (form.value.id_productos) {
+      cargando.value = true
+      try {
+        const { error } = await supabase
+          .from('producto')
+          .delete()
+          .eq('id_productos', form.value.id_productos)
+          
+        if (error) throw error
+        alert('Producto eliminado correctamente.')
+        modoVista.value = 'nuevo'
+      } catch (err: any) {
+        alert("Error al eliminar: " + err.message)
+      } finally {
+        cargando.value = false
+      }
+    } else {
+      form.value = { ...form.value, titulo: '', sinopsis: '', precio: '', id_productos: null }
+      modoVista.value = 'nuevo'
     }
-    modoVista.value = 'nuevo'
   }
 }
 
@@ -215,8 +271,10 @@ const prepareNuevoBanner = () => {
               </div>
 
               <div class="results-list">
-                <div v-if="cargando" class="loader">Cargando productos...</div>
-                <div 
+                <div v-if="cargando" class="loader-container">
+                  <div class="spinner"></div>
+                </div>
+                <div v-else
                   v-for="p in productosFiltrados" 
                   :key="p.id_productos" 
                   class="result-item"
@@ -397,9 +455,13 @@ const prepareNuevoBanner = () => {
 </template>
 
 <style scoped>
-.page-layout { display: flex; flex-direction: column; height: 100vh; background-color: #fff; }
+@import url('https://fonts.googleapis.com/css2?family=Hina+Mincho&family=Inter:wght@300;400;500;600;700&display=swap');
+
+.hina-mincho-font { font-family: 'Hina Mincho', serif; }
+
+.page-layout { display: flex; flex-direction: column; height: 100vh; background-color: #fff; font-family: 'Inter', sans-serif; }
 .main-wrapper { display: flex; flex: 1; overflow: hidden; }
-.content-area { flex: 1; padding: 40px; overflow-y: auto; background-color: #fff; }
+.content-area { flex: 1; padding: 40px; overflow-y: auto; background-color: #fdfdfd; }
 
 .admin-container { max-width: 1200px; margin: 0 auto; }
 .admin-view-header {
@@ -410,7 +472,12 @@ const prepareNuevoBanner = () => {
 }
 .header-actions { display: flex; gap: 30px; align-items: center; }
 
-.view-title { font-family: 'Georgia', serif; font-size: 2.5rem; color: #333; }
+.view-title { font-family: 'Hina Mincho', serif; font-size: 2.8rem; color: #333; font-weight: normal; }
+
+/* SPINNER CARGA */
+.loader-container { display: flex; justify-content: center; align-items: center; padding: 40px; }
+.spinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #9584c4; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
 .editor-grid {
   display: grid;
@@ -642,22 +709,24 @@ input[type=number] {
 }
 
 .icon-actions { display: flex; gap: 25px; }
-.icon-btn { background: none; border: none; cursor: pointer; color: #333; transition: transform 0.2s; }
-.icon-btn:hover { transform: scale(1.1); color: #8B77D0; }
+.icon-btn { background: none; border: none; cursor: pointer; color: #9584c4; transition: transform 0.2s, color 0.3s; }
+.icon-btn:hover { transform: scale(1.15); color: #7a69ab; }
 
 .inputs-stack { display: flex; flex-direction: column; gap: 15px; }
 .admin-input, .admin-textarea {
   width: 100%;
   padding: 12px 20px;
-  border: 1px solid #D1C4E9;
+  border: 1px solid #e0d8f0;
   border-radius: 12px;
   font-size: 1.1rem;
-  font-family: 'Georgia', serif;
+  font-family: 'Inter', sans-serif;
   outline: none;
-  background-color: #fff;
+  background-color: #fafafa;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
+.admin-input:focus, .admin-textarea:focus { border-color: #9584c4; box-shadow: 0 0 0 3px rgba(149, 132, 196, 0.15); background-color: #fff; }
 .admin-textarea { height: 120px; resize: none; }
-.admin-input::placeholder, .admin-textarea::placeholder { color: #888; font-style: italic; }
+.admin-input::placeholder, .admin-textarea::placeholder { color: #aaa; font-style: italic; font-family: 'Hina Mincho', serif;}
 
 .access-denied { text-align: center; margin-top: 100px; }
 .access-denied button { margin-top: 20px; padding: 10px 20px; background: #6A5ACD; color: white; border: none; border-radius: 5px; cursor: pointer; }
@@ -673,28 +742,31 @@ input[type=number] {
 .search-box-admin {
   display: flex;
   background: white;
-  border: 1px solid #D1C4E9;
+  border: 1px solid #e0d8f0;
   border-radius: 25px;
   overflow: hidden;
   max-width: 600px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.03);
 }
 
 .search-box-admin input {
   flex: 1;
   border: none;
-  padding: 12px 25px;
+  padding: 15px 25px;
   font-size: 1.1rem;
   outline: none;
-  font-family: 'Georgia', serif;
+  font-family: 'Inter', sans-serif;
 }
 
 .search-icon-btn {
   background: transparent;
   border: none;
   padding: 0 20px;
-  color: #333;
+  color: #9584c4;
   cursor: pointer;
+  transition: transform 0.2s;
 }
+.search-icon-btn:hover { transform: scale(1.1); }
 
 .results-list {
   display: flex;
@@ -707,22 +779,26 @@ input[type=number] {
 
 .result-item {
   background: white;
-  border: 1px solid #D1C4E9;
-  color: #333;
+  border: 1px solid #e0d8f0;
+  color: #444;
   padding: 18px 30px;
   border-radius: 12px;
   font-size: 1.2rem;
-  font-family: 'Georgia', serif;
+  font-family: 'Hina Mincho', serif;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
 }
 
 .result-item:hover {
-  background-color: #D1C4E9;
-  transform: translateX(5px);
+  background-color: #fcfaff;
+  border-color: #9584c4;
+  transform: translateX(8px);
+  box-shadow: 0 5px 15px rgba(149, 132, 196, 0.1);
+  color: #222;
 }
 
-.loader { text-align: center; color: #8B77D0; font-style: italic; margin-top: 20px; }
+.loader { text-align: center; color: #9584c4; font-style: italic; margin-top: 20px; font-family: 'Hina Mincho', serif;}
 
 /* Scrollbar personalizado */
 .results-list::-webkit-scrollbar { width: 6px; }
