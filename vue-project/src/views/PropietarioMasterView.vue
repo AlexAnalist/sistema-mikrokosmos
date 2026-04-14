@@ -141,8 +141,8 @@ const navegarA = (ruta: string) => {
 
               <!-- BOTONES DE NAVEGACIÓN -->
               <div class="profile-management-grid hina-mincho-font">
-                <button class="mgmt-btn" @click="navegarA('/admin/catalogo')">
-                  📦 Gestionar Inventario
+                <button class="mgmt-btn" @click="router.push({ name: 'admin-catalogo' })">
+                  📦 Módulo de edición
                 </button>
                 <button class="mgmt-btn" @click="navegarA('/gestor')">
                   🚚 Ver Envíos y Pagos
