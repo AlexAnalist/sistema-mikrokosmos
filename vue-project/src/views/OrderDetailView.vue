@@ -136,7 +136,7 @@ const costoEnvio = computed(() => {
   return 0 // Por defecto o sin envío aún
 })
 
-const totalFinal = computed(() => subtotal.value + costoEnvio.value)
+const totalFinal = computed(() => subtotal.value )
 
 onMounted(() => {
   fetchOrderDetails()
@@ -235,10 +235,10 @@ onMounted(() => {
                       <span>Subtotal</span>
                       <span>{{ formatearMoneda(subtotal) }}</span>
                     </div>
-                    <div class="summary-row">
+                    <!--<div class="summary-row">
                       <span>Costo de Envío</span>
                       <span>{{ costoEnvio > 0 ? formatearMoneda(costoEnvio) : 'Gratis / Pendiente' }}</span>
-                    </div>
+                    </div> -->
                     <div class="summary-row total-row">
                       <span>Total Final</span>
                       <span class="total-value">{{ formatearMoneda(totalFinal) }}</span>
