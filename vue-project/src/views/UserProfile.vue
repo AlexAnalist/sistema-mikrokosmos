@@ -142,7 +142,7 @@ onMounted(() => {
               <button v-if="canViewOrdersModule" @click="router.push('/gestor')" class="btn-menu">Módulo de pedidos</button>
               
               <!-- Administrador en adelante -->
-              <button v-if="canViewEditorModule" class="btn-menu">Módulo de edición</button>
+              <button v-if="canViewEditorModule" @click="router.push('/admin/catalogo')" class="btn-menu">Módulo de edición</button>
 
               <!-- Solo Propietaria -->
               <button v-if="canViewStatsAndPermissions" class="btn-menu">Estadísticas</button>

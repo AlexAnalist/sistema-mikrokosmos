@@ -5,10 +5,7 @@ import { supabase } from '@/supabase'
 import { 
   Plus, 
   Check, 
-  Trash2, 
-  ChevronDown, 
-  ChevronsUpDown,
-  Image as ImageIcon 
+  Trash2,
 } from 'lucide-vue-next'
 import TheHeader from '@/components/TheHeader.vue'
 import TheSideBar from '@/components/TheSideBar.vue'
@@ -18,7 +15,6 @@ const router = useRouter()
 
 // --- INTERFACES ---
 interface Producto {
-  id_productosCol?: number; // Internal logic if needed, but DB uses id_productos
   id_productos: number;
   nombre: string;
   descripcion?: string;
@@ -28,8 +24,9 @@ interface Producto {
 }
 
 interface Banner {
-  imagen: string;
-  titulo: string;
+  id_header: number;
+  imagen_url: string;
+  texto_banner: string;
 }
 
 interface UserSession {
@@ -48,16 +45,40 @@ const listaProductos = ref<Producto[]>([])
 const terminoBusqueda = ref('')
 
 // Banners
-const bannersData = ref<Banner[]>([
-  { imagen: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=1200", titulo: 'PREVENTA IMPERDIBLE*' },
-  { imagen: "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?w=1200", titulo: 'ADÉNTRATE EN LA FANTASÍA' },
-  { imagen: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=1200", titulo: 'TENDENCIAS DEL MES' }
-])
+const bannersData        = ref<Banner[]>([])
 const indiceBannerActual = ref(0)
-const ordenBannerActual = ref(1)
-const isCreandoBanner = ref(false)
-const modoVista = ref<'nuevo' | 'busqueda' | 'edicion' | 'banner'>('nuevo')
-const cargando = ref(false)
+const isCreandoBanner    = ref(false)
+const cargandoBanners    = ref(false)
+const archivoBanner      = ref<File | null>(null)
+const bannerPreviewUrl   = ref<string>('')
+const textoBannerNuevo   = ref<string>('')
+const modoVista          = ref<'nuevo' | 'busqueda' | 'edicion' | 'banner'>('nuevo')
+const cargando           = ref(false)
+
+// --- IMAGEN ---
+const fileInputPortada = ref<HTMLInputElement | null>(null)
+const bannerFileInput  = ref<HTMLInputElement | null>(null)
+const imagenPreviewUrl = ref<string>('')
+const archivoImagen    = ref<File | null>(null)
+
+const triggerFileInput       = () => fileInputPortada.value?.click()
+const triggerBannerFileInput = () => bannerFileInput.value?.click()
+
+const onFileSelected = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (file) {
+    archivoImagen.value = file
+    imagenPreviewUrl.value = URL.createObjectURL(file)
+  }
+}
+
+const onBannerFileSelected = (e: Event) => {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (file) {
+    archivoBanner.value   = file
+    bannerPreviewUrl.value = URL.createObjectURL(file)
+  }
+}
 
 // Campos del formulario
 const form = ref({
@@ -74,7 +95,7 @@ const form = ref({
   dim_largo: '' as number | string,
   tapa: 'Blanda',
   color: '',
-  weight: '' as number | string,
+  peso: '' as number | string,
   categoria: 'Velas'
 })
 
@@ -82,14 +103,45 @@ const toggleSidebar = () => {
   sidebarOpen.value = !sidebarOpen.value
 }
 
-// --- CONEXIÓN SUPABASE ---
+// --- BANNERS: CARGA Y SUBIDA ---
+const cargarBanners = async () => {
+  cargandoBanners.value = true
+  try {
+    const { data, error } = await supabase
+      .from('header')
+      .select('id_header, imagen_url, texto_banner')
+      .order('id_header', { ascending: true })
+    if (error) throw error
+    bannersData.value = (data || []) as Banner[]
+  } catch (e: any) {
+    console.error('Error cargando banners:', e.message)
+  } finally {
+    cargandoBanners.value = false
+  }
+}
+
+const uploadBannerImagen = async (): Promise<string | null> => {
+  if (!archivoBanner.value) return null
+  const file = archivoBanner.value
+  const ext  = file.name.split('.').pop()
+  const path = `banners/${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from('imagenes').upload(path, file, { upsert: true })
+  if (error) {
+    alert(`❌ Error al subir imagen del banner: ${error.message}`)
+    return null
+  }
+  const { data } = supabase.storage.from('imagenes').getPublicUrl(path)
+  return data.publicUrl
+}
+
+// --- CONEXIÓN SUPABASE: PRODUCTOS ---
 const cargarProductos = async () => {
   cargando.value = true
   modoVista.value = 'busqueda'
   try {
     const { data, error } = await supabase
       .from('producto')
-      .select('id_productos, nombre, descripcion, precio, tipo_producto, producto_imagenes(url_imagen)')
+      .select('id_productos, nombre, precio, tiempo_envio, tipo_producto, producto_imagenes(url_imagen)')
     
     if (error) throw error
     
@@ -97,7 +149,6 @@ const cargarProductos = async () => {
       listaProductos.value = data.map((p: any) => ({
         id_productos: p.id_productos,
         nombre: p.nombre,
-        descripcion: p.descripcion,
         precio: p.precio,
         tipo_producto: p.tipo_producto,
         url_imagen: p.producto_imagenes?.[0]?.url_imagen || ''
@@ -110,28 +161,106 @@ const cargarProductos = async () => {
   }
 }
 
-const seleccionarProducto = (p: Producto) => {
+// Seleccionar producto para edición — carga todos los datos desde libro_detalles o articulo_detalles
+const seleccionarProducto = async (p: Producto) => {
+  // Determinar tipo por campo real de la BD
+  const esLibro = p.tipo_producto?.toLowerCase() === 'libro'
+  tipoProducto.value = esLibro ? 'libro' : 'articulo'
+
+  // Poblar campos base
   form.value = {
     id_productos: p.id_productos,
     titulo: p.nombre,
-    autor: '', 
+    autor: '',
     editorial: '',
-    sinopsis: p.descripcion || '',
+    sinopsis: '',
     tipoEnvio: '',
     precio: p.precio || '',
-    paginas: 200, dim_alto: '', dim_ancho: '', dim_largo: '', tapa: 'Blanda',
-    color: '', weight: '', categoria: 'Velas'
+    paginas: 200,
+    dim_alto: '', dim_ancho: '', dim_largo: '',
+    tapa: 'Blanda',
+    color: '',
+    peso: '',
+    categoria: 'Velas'
   }
-  
-  // Detección mejorada: si el nombre sugiere un accesorio o si viene de la tabla/lógica de artículos
-  const esAccesorio = 
-    p.nombre.toLowerCase().includes('vela') || 
-    p.nombre.toLowerCase().includes('lámpara') || 
-    p.nombre.toLowerCase().includes('funda') || 
-    p.nombre.toLowerCase().includes('separador')
 
-  tipoProducto.value = esAccesorio ? 'articulo' : 'libro'
+  // Limpiar imagen previa
+  imagenPreviewUrl.value = p.url_imagen || ''
+  archivoImagen.value = null
+
+  // Cargar datos específicos del tipo
+  try {
+    if (esLibro) {
+      const { data } = await supabase
+        .from('libro_detalles')
+        .select('autor, editorial, sinopsis, n_paginas, tipo_tapa, dimensiones')
+        .eq('id_productos', p.id_productos)
+        .single()
+
+      if (data) {
+        form.value.autor     = data.autor     || ''
+        form.value.editorial = data.editorial  || ''
+        form.value.sinopsis  = data.sinopsis   || ''
+        form.value.paginas   = data.n_paginas  || 200
+        form.value.tapa      = data.tipo_tapa  || 'Blanda'
+        // dimensiones viene como "AxBxC cm" — intentamos separar
+        if (data.dimensiones) {
+          const partes = data.dimensiones.replace(/\s*cm/i, '').split('x').map((s: string) => s.trim())
+          form.value.dim_alto  = partes[0] || ''
+          form.value.dim_ancho = partes[1] || ''
+          form.value.dim_largo = partes[2] || ''
+        }
+      }
+    } else {
+      const { data } = await supabase
+        .from('articulo_detalles')
+        .select('categoria, descripcion, peso, color')
+        .eq('id_productos', p.id_productos)
+        .single()
+
+      if (data) {
+        form.value.categoria = data.categoria  || 'Velas'
+        form.value.sinopsis  = data.descripcion || ''
+        form.value.peso      = data.peso        || ''
+        form.value.color     = data.color       || ''
+      }
+    }
+  } catch (e) {
+    console.warn("No se encontraron detalles adicionales para el producto:", e)
+  }
+
   modoVista.value = 'edicion'
+}
+
+// Subir imagen a Supabase Storage y registrar en producto_imagenes
+const uploadImagen = async (productId: number): Promise<string | null> => {
+  if (!archivoImagen.value) return null
+  try {
+    const file = archivoImagen.value
+    const ext  = file.name.split('.').pop()
+    const path = `productos/${productId}/${Date.now()}.${ext}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('imagenes')
+      .upload(path, file, { upsert: true })
+
+    if (uploadError) throw uploadError
+
+    const { data: urlData } = supabase.storage.from('imagenes').getPublicUrl(path)
+    const publicUrl = urlData.publicUrl
+
+    // INSERT en producto_imagenes (PK es id_imagen autoincremental, no id_productos)
+    const { error: dbError } = await supabase
+      .from('producto_imagenes')
+      .insert({ id_productos: productId, url_imagen: publicUrl })
+
+    if (dbError) throw dbError
+
+    return publicUrl
+  } catch (err: any) {
+    console.warn("Error al subir imagen:", err.message)
+    return null
+  }
 }
 
 const productosFiltrados = computed(() => {
@@ -141,55 +270,190 @@ const productosFiltrados = computed(() => {
 })
 
 // --- VERIFICACIÓN DE ACCESO ---
-onMounted(() => {
+onMounted(async () => {
   const user = JSON.parse(localStorage.getItem('mikrokosmos_user') || '{}') as UserSession
   if (user && (user.email === 'admin@libreria.com' || user.id_rol === 1)) {
-    isAdmin.value = true 
+    isAdmin.value = true
   } else {
-    // Para propósitos de desarrollo dejamos que se vea pero podrías redirigir
     isAdmin.value = true
   }
+  // Cargar banners al entrar
+  await cargarBanners()
 })
 
+// --- GUARDAR (INSERT o UPDATE) ---
 const handleSave = async () => {
+  // ── GUARDAR BANNER ──
   if (modoVista.value === 'banner') {
-    alert('Banner guardado/actualizado (Simulación)')
-    isCreandoBanner.value = false
+    cargando.value = true
+    try {
+      const urlImagen = await uploadBannerImagen()
+
+      if (isCreandoBanner.value) {
+        // Crear nuevo banner
+        if (!urlImagen && !textoBannerNuevo.value.trim()) {
+          alert('Por favor selecciona una imagen o escribe un título para el banner.')
+          cargando.value = false
+          return
+        }
+        const { error } = await supabase
+          .from('header')
+          .insert({ imagen_url: urlImagen || '', texto_banner: textoBannerNuevo.value })
+        if (error) throw error
+        alert('✅ Banner creado correctamente.')
+      } else {
+        // Actualizar banner existente
+        const bannerActual = bannersData.value[indiceBannerActual.value]
+        if (!bannerActual) { cargando.value = false; return }
+
+        const updates: Partial<Banner> = {}
+        if (urlImagen) updates.imagen_url = urlImagen
+        if (textoBannerNuevo.value.trim()) updates.texto_banner = textoBannerNuevo.value.trim()
+
+        if (Object.keys(updates).length === 0) {
+          alert('No hay cambios para guardar. Selecciona una imagen o edita el título.')
+          cargando.value = false
+          return
+        }
+
+        const { error } = await supabase
+          .from('header')
+          .update(updates)
+          .eq('id_header', bannerActual.id_header)
+        if (error) throw error
+        alert('✅ Banner actualizado correctamente.')
+      }
+
+      // Recargar y limpiar
+      await cargarBanners()
+      isCreandoBanner.value = false
+      archivoBanner.value   = null
+      bannerPreviewUrl.value = ''
+      textoBannerNuevo.value = ''
+    } catch (err: any) {
+      alert('❌ Error al guardar banner: ' + err.message)
+    } finally {
+      cargando.value = false
+    }
+    return
+  }
+
+  if (!form.value.titulo.trim()) {
+    alert('El nombre del producto no puede estar vacío.')
     return
   }
 
   cargando.value = true
   try {
-    const formData = {
-      nombre: form.value.titulo,
-      descripcion: form.value.sinopsis,
-      precio: form.value.precio,
+    const productoData = {
+      nombre:        form.value.titulo,
+      precio:        form.value.precio,
+      tiempo_envio:  form.value.tipoEnvio || null,
       tipo_producto: tipoProducto.value === 'libro' ? 'Libro' : 'Articulo'
     }
 
-    if (modoVista.value === 'edicion' && form.value.id_productos) {
-      // UPDATE
+    let productId = form.value.id_productos
+
+    if (modoVista.value === 'edicion' && productId) {
+      // ── UPDATE producto ──
       const { error } = await supabase
         .from('producto')
-        .update(formData)
-        .eq('id_productos', form.value.id_productos)
-      
+        .update(productoData)
+        .eq('id_productos', productId)
       if (error) throw error
-      alert(`Producto actualizado correctamente.`)
+
+      // ── UPDATE detalles específicos ──
+      if (tipoProducto.value === 'libro') {
+        const dimStr = [form.value.dim_alto, form.value.dim_ancho, form.value.dim_largo]
+          .filter(Boolean).join('x') + (form.value.dim_alto ? ' cm' : '')
+
+        const { error: eL } = await supabase
+          .from('libro_detalles')
+          .upsert({
+            id_productos: productId,
+            autor:        form.value.autor,
+            editorial:    form.value.editorial,
+            sinopsis:     form.value.sinopsis,
+            n_paginas:    Number(form.value.paginas) || null,
+            tipo_tapa:    form.value.tapa,
+            dimensiones:  dimStr || null,
+          }, { onConflict: 'id_productos' })
+        if (eL) throw eL
+      } else {
+        const { error: eA } = await supabase
+          .from('articulo_detalles')
+          .upsert({
+            id_productos: productId,
+            categoria:    form.value.categoria,
+            descripcion:  form.value.sinopsis,
+            peso:         Number(form.value.peso)  || null,
+            color:        form.value.color,
+          }, { onConflict: 'id_productos' })
+        if (eA) throw eA
+      }
+
+      // ── Subir imagen si se seleccionó una nueva ──
+      await uploadImagen(productId)
+
+      alert('Producto actualizado correctamente.')
+
     } else {
-      // INSERT
+      // ── INSERT producto ──
       const { data, error } = await supabase
         .from('producto')
-        .insert([formData])
+        .insert([productoData])
         .select('id_productos')
         .single()
-        
       if (error) throw error
-      alert(`Producto creado correctamente con ID: ${data?.id_productos}`)
+
+      productId = data.id_productos
+
+      // ── INSERT detalles específicos ──
+      if (tipoProducto.value === 'libro') {
+        const dimStr = [form.value.dim_alto, form.value.dim_ancho, form.value.dim_largo]
+          .filter(Boolean).join('x') + (form.value.dim_alto ? ' cm' : '')
+
+        const { error: eL } = await supabase
+          .from('libro_detalles')
+          .insert({
+            id_productos: productId,
+            autor:        form.value.autor,
+            editorial:    form.value.editorial,
+            sinopsis:     form.value.sinopsis,
+            n_paginas:    Number(form.value.paginas) || null,
+            tipo_tapa:    form.value.tapa,
+            dimensiones:  dimStr || null,
+          })
+        if (eL) throw eL
+      } else {
+        const { error: eA } = await supabase
+          .from('articulo_detalles')
+          .insert({
+            id_productos: productId,
+            categoria:    form.value.categoria,
+            descripcion:  form.value.sinopsis,
+            peso:         Number(form.value.peso)  || null,
+            color:        form.value.color,
+          })
+        if (eA) throw eA
+      }
+
+      // ── Subir imagen si se seleccionó ──
+      await uploadImagen(productId!)
+
+      alert(`Producto creado correctamente con ID: ${productId}`)
     }
-    
+
+    // Resetear formulario
     modoVista.value = 'nuevo'
-    form.value = { ...form.value, titulo: '', sinopsis: '', precio: '', id_productos: null }
+    imagenPreviewUrl.value = ''
+    archivoImagen.value = null
+    form.value = {
+      id_productos: null, titulo: '', autor: '', editorial: '',
+      sinopsis: '', tipoEnvio: '', precio: '',
+      paginas: 200, dim_alto: '', dim_ancho: '', dim_largo: '',
+      tapa: 'Blanda', color: '', peso: '', categoria: 'Velas'
+    }
   } catch (err: any) {
     console.error("Error guardando producto:", err)
     alert("Error al guardar: " + err.message)
@@ -199,33 +463,75 @@ const handleSave = async () => {
 }
 
 const handleDelete = async () => {
-  if (confirm('¿Estás seguro de que deseas eliminar este producto (y todas sus referencias)?')) {
-    if (modoVista.value === 'banner') {
-      alert('Banner eliminado (Simulación)')
+  if (!confirm('¿Estás seguro de que deseas eliminar este producto y todas sus referencias?')) return
+
+  // ── ELIMINAR BANNER ──
+  if (modoVista.value === 'banner') {
+    if (isCreandoBanner.value) {
       isCreandoBanner.value = false
+      archivoBanner.value   = null
+      bannerPreviewUrl.value = ''
+      textoBannerNuevo.value = ''
       return
     }
-
-    if (form.value.id_productos) {
-      cargando.value = true
-      try {
-        const { error } = await supabase
-          .from('producto')
-          .delete()
-          .eq('id_productos', form.value.id_productos)
-          
-        if (error) throw error
-        alert('Producto eliminado correctamente.')
-        modoVista.value = 'nuevo'
-      } catch (err: any) {
-        alert("Error al eliminar: " + err.message)
-      } finally {
-        cargando.value = false
-      }
-    } else {
-      form.value = { ...form.value, titulo: '', sinopsis: '', precio: '', id_productos: null }
-      modoVista.value = 'nuevo'
+    const bannerActual = bannersData.value[indiceBannerActual.value]
+    if (!bannerActual) return
+    cargando.value = true
+    try {
+      const { error } = await supabase
+        .from('header')
+        .delete()
+        .eq('id_header', bannerActual.id_header)
+      if (error) throw error
+      alert('✅ Banner eliminado correctamente.')
+      await cargarBanners()
+      indiceBannerActual.value = 0
+    } catch (err: any) {
+      alert('❌ Error al eliminar banner: ' + err.message)
+    } finally {
+      cargando.value = false
     }
+    return
+  }
+
+  if (form.value.id_productos) {
+    cargando.value = true
+    try {
+      // Eliminar detalles primero (relaciones)
+      await supabase.from('libro_detalles').delete().eq('id_productos', form.value.id_productos)
+      await supabase.from('articulo_detalles').delete().eq('id_productos', form.value.id_productos)
+      await supabase.from('producto_imagenes').delete().eq('id_productos', form.value.id_productos)
+
+      const { error } = await supabase
+        .from('producto')
+        .delete()
+        .eq('id_productos', form.value.id_productos)
+      if (error) throw error
+
+      alert('Producto eliminado correctamente.')
+      modoVista.value = 'nuevo'
+      imagenPreviewUrl.value = ''
+      archivoImagen.value = null
+      form.value = {
+        id_productos: null, titulo: '', autor: '', editorial: '',
+        sinopsis: '', tipoEnvio: '', precio: '',
+        paginas: 200, dim_alto: '', dim_ancho: '', dim_largo: '',
+        tapa: 'Blanda', color: '', peso: '', categoria: 'Velas'
+      }
+    } catch (err: any) {
+      alert("Error al eliminar: " + err.message)
+    } finally {
+      cargando.value = false
+    }
+  } else {
+    // Nuevo sin guardar, solo limpiar
+    form.value = {
+      id_productos: null, titulo: '', autor: '', editorial: '',
+      sinopsis: '', tipoEnvio: '', precio: '',
+      paginas: 200, dim_alto: '', dim_ancho: '', dim_largo: '',
+      tapa: 'Blanda', color: '', peso: '', categoria: 'Velas'
+    }
+    modoVista.value = 'nuevo'
   }
 }
 
@@ -246,10 +552,10 @@ const prepareNuevoBanner = () => {
           <header class="admin-view-header">
             <h1 class="view-title">Edición de Catálogo</h1>
             <div class="header-actions">
-              <button class="icon-btn" @click="handleSave">
+              <button class="icon-btn" @click="handleSave" :disabled="cargando" title="Guardar">
                 <Check :size="40" />
               </button>
-              <button class="icon-btn" @click="handleDelete">
+              <button class="icon-btn" @click="handleDelete" :disabled="cargando" title="Eliminar">
                 <Trash2 :size="40" />
               </button>
             </div>
@@ -266,101 +572,194 @@ const prepareNuevoBanner = () => {
             <!-- VISTA DE BÚSQUEDA -->
             <div class="search-overlay" v-if="modoVista === 'busqueda'">
               <div class="search-box-admin">
-                <input type="text" v-model="terminoBusqueda" placeholder="Value" />
-                <button class="search-icon-btn"><Check :size="20" /></button>
+                <input
+                  type="text"
+                  v-model="terminoBusqueda"
+                  placeholder="Buscar producto..."
+                  @keyup.enter="() => {}"
+                />
+                <button class="search-icon-btn" @click="() => {}" title="Buscar">
+                  <Check :size="20" />
+                </button>
               </div>
 
               <div class="results-list">
                 <div v-if="cargando" class="loader-container">
                   <div class="spinner"></div>
                 </div>
-                <div v-else
-                  v-for="p in productosFiltrados" 
-                  :key="p.id_productos" 
-                  class="result-item"
-                  @click="seleccionarProducto(p)"
-                >
-                  {{ p.nombre }}
-                </div>
+                <template v-else>
+                  <p v-if="productosFiltrados.length === 0" class="no-results">No se encontraron productos.</p>
+                  <div
+                    v-for="p in productosFiltrados"
+                    :key="p.id_productos"
+                    class="result-item"
+                    @click="seleccionarProducto(p)"
+                  >
+                    <span class="result-nombre">{{ p.nombre }}</span>
+                    <span class="result-tipo">{{ p.tipo_producto }}</span>
+                  </div>
+                </template>
               </div>
             </div>
 
             <!-- VISTA DE BANNER -->
             <div class="banner-manager-view" v-else-if="modoVista === 'banner'">
-              <!-- SUB-VISTA: CREAR NUEVO -->
-              <template v-if="isCreandoBanner">
-                <div class="banner-section">
-                  <p class="section-label">Vista previa:</p>
-                  <div class="banner-preview-box">
-                    <!-- Imagen de ejemplo del mockup -->
-                    <img src="https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=800" class="banner-preview-img-square" />
-                  </div>
-                  <div class="carousel-dots-admin">
-                    <span class="dot-admin active"></span>
-                    <span class="dot-admin"></span>
-                    <span class="dot-admin"></span>
-                  </div>
-                </div>
 
-                <div class="banner-section">
-                  <p class="section-label">Selecciona la imagen para reemplazar:</p>
-                  <div class="dropzone banner-dropzone">
-                    <Plus :size="80" class="plus-icon" />
-                  </div>
-                </div>
+              <!-- Input file único para banners (oculto) -->
+              <input
+                type="file"
+                ref="bannerFileInput"
+                accept="image/*"
+                hidden
+                @change="onBannerFileSelected"
+              />
 
-                <div class="order-selector-section">
-                  <p class="section-label">Selecciona el orden:</p>
-                  <div class="order-boxes">
-                    <div 
-                      v-for="n in 4" 
-                      :key="n" 
-                      class="order-box"
-                      :class="{ active: n === ordenBannerActual }"
-                      @click="ordenBannerActual = n"
-                    >
-                      {{ n }}
+              <!-- SPINNER cargando banners -->
+              <div v-if="cargandoBanners" class="loader-container">
+                <div class="spinner"></div>
+              </div>
+
+              <template v-else>
+
+                <!-- ══ MODO CREAR NUEVO BANNER ══ -->
+                <template v-if="isCreandoBanner">
+
+                  <!-- Vista previa (arriba) -->
+                  <div class="banner-section">
+                    <p class="section-label">Vista previa:</p>
+                    <div class="banner-preview-box">
+                      <img
+                        v-if="bannerPreviewUrl"
+                        :src="bannerPreviewUrl"
+                        class="banner-preview-img"
+                        alt="Vista previa"
+                      />
+                      <div v-else class="banner-placeholder-text">Sin imagen seleccionada</div>
                     </div>
                   </div>
-                </div>
-              </template>
 
-              <!-- SUB-VISTA: LISTA EXISTENTE -->
-              <template v-else>
-                <div class="banner-section">
-                  <p class="section-label">Selecciona un banner existente:</p>
-                  <div class="banner-preview-box" v-if="bannersData[indiceBannerActual]">
-                    <img :src="bannersData[indiceBannerActual].imagen" class="banner-preview-img" />
+                  <!-- Título -->
+                  <div class="banner-section">
+                    <p class="section-label">Título del banner:</p>
+                    <input
+                      type="text"
+                      v-model="textoBannerNuevo"
+                      placeholder="Ej: PREVENTA IMPERDIBLE"
+                      class="admin-input"
+                    />
                   </div>
-                  <div class="carousel-dots-admin">
-                    <span 
-                      v-for="(_, i) in bannersData" 
-                      :key="i" 
-                      class="dot-admin"
-                      :class="{ active: i === indiceBannerActual }"
-                      @click="indiceBannerActual = i"
-                    ></span>
-                  </div>
-                </div>
 
-                <div class="banner-section">
-                  <p class="section-label">Selecciona la imagen para reemplazar:</p>
-                  <div class="dropzone banner-dropzone">
-                    <Plus :size="80" class="plus-icon" />
+                  <!-- Dropzone (abajo) -->
+                  <div class="banner-section">
+                    <p class="section-label">Selecciona la imagen:</p>
+                    <div class="dropzone banner-dropzone" @click="triggerBannerFileInput" title="Haz clic para seleccionar imagen">
+                      <Plus :size="80" class="plus-icon" />
+                    </div>
                   </div>
-                </div>
 
-                <button class="add-new-banner-btn" @click="prepareNuevoBanner">Agrega un nuevo banner</button>
+                  <!-- Botón cancelar (el ✓ en el header acepta) -->
+                  <button
+                    class="cancel-banner-btn"
+                    @click="isCreandoBanner = false; bannerPreviewUrl = ''; archivoBanner = null; textoBannerNuevo = ''"
+                  >
+                    Cancelar
+                  </button>
+                </template>
+
+                <!-- ══ MODO VER / EDITAR BANNERS EXISTENTES ══ -->
+                <template v-else>
+
+                  <!-- Sin banners -->
+                  <div v-if="bannersData.length === 0" class="no-results">
+                    No hay banners registrados aún.
+                  </div>
+
+                  <!-- Carousel de banners existentes -->
+                  <template v-else>
+                    <div class="banner-section">
+                      <p class="section-label">
+                        Selecciona un banner existente
+                        <span class="banner-count-badge">{{ indiceBannerActual + 1 }} / {{ bannersData.length }}</span>
+                      </p>
+                      <div class="banner-preview-box">
+                        <img
+                          :src="bannerPreviewUrl || bannersData[indiceBannerActual]?.imagen_url"
+                          class="banner-preview-img"
+                          alt="Banner"
+                        />
+                      </div>
+                      <!-- Dots de navegación -->
+                      <div class="carousel-dots-admin">
+                        <span
+                          v-for="(b, i) in bannersData"
+                          :key="b.id_header"
+                          class="dot-admin"
+                          :class="{ active: i === indiceBannerActual }"
+                          @click="indiceBannerActual = i; bannerPreviewUrl = ''; archivoBanner = null; textoBannerNuevo = ''"
+                        ></span>
+                      </div>
+                    </div>
+
+                    <!-- Editar imagen del banner seleccionado -->
+                    <div class="banner-section">
+                      <p class="section-label">Reemplazar imagen:</p>
+                      <div class="dropzone banner-dropzone" @click="triggerBannerFileInput" title="Haz clic para seleccionar imagen">
+                        <Plus :size="80" class="plus-icon" />
+                      </div>
+                    </div>
+
+                    <!-- Editar título del banner seleccionado -->
+                    <div class="banner-section">
+                      <p class="section-label">Editar título:</p>
+                      <input
+                        type="text"
+                        v-model="textoBannerNuevo"
+                        :placeholder="bannersData[indiceBannerActual]?.texto_banner || 'Título del banner...'"
+                        class="admin-input"
+                      />
+                    </div>
+                  </template>
+
+                  <!-- Botón crear nuevo (máximo 3) -->
+                  <button
+                    v-if="bannersData.length < 3"
+                    class="add-new-banner-btn"
+                    @click="isCreandoBanner = true; bannerPreviewUrl = ''; archivoBanner = null; textoBannerNuevo = ''"
+                  >
+                    Agrega un nuevo banner
+                  </button>
+                  <p v-else class="banner-max-msg">Límite de 3 banners alcanzado. Elimina uno para agregar otro.</p>
+
+                </template>
               </template>
             </div>
+
+
 
             <!-- VISTA DE FORMULARIO (EDICIÓN O NUEVO) -->
             <template v-else>
               <!-- COLUMNA CENTRAL: CARGA DE IMAGEN -->
               <div class="image-uploader-section">
-                <p class="uploader-label">Arrastra la portada aquí o haz clic para subir:</p>
-                <div class="dropzone">
-                  <Plus :size="60" class="plus-icon" />
+                <p class="uploader-label">Haz clic en el recuadro para subir la portada:</p>
+
+                <!-- Input file oculto para portada -->
+                <input
+                  type="file"
+                  ref="fileInputPortada"
+                  accept="image/*"
+                  hidden
+                  @change="onFileSelected"
+                />
+
+                <!-- Dropzone: muestra preview si hay imagen, si no muestra el + -->
+                <div class="dropzone" @click="triggerFileInput" title="Haz clic para seleccionar imagen">
+                  <img
+                    v-if="imagenPreviewUrl"
+                    :src="imagenPreviewUrl"
+                    class="preview-img"
+                    alt="Vista previa"
+                  />
+                  <Plus v-else :size="60" class="plus-icon" />
                 </div>
                 
                 <!-- SELECTORES DINÁMICOS -->
@@ -577,7 +976,24 @@ const prepareNuevoBanner = () => {
   justify-content: center;
   align-items: center;
   cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
 }
+.banner-dropzone:hover { border-color: #8B77D0; background-color: #f5f0ff; }
+
+.banner-placeholder-text {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  color: #aaa;
+  font-style: italic;
+  font-family: 'Georgia', serif;
+  font-size: 1.1rem;
+}
+
+.banner-section { display: flex; flex-direction: column; gap: 10px; }
+
 
 .add-new-banner-btn {
   background-color: #C1B4E7;
@@ -613,7 +1029,7 @@ const prepareNuevoBanner = () => {
 
 /* COLUMNA CENTRAL */
 .image-uploader-section { display: flex; flex-direction: column; align-items: center; gap: 15px; }
-.uploader-label { font-size: 0.9rem; color: #666; font-style: italic; }
+.uploader-label { font-size: 0.9rem; color: #666; font-style: italic; text-align: center; }
 .dropzone {
   width: 100%;
   aspect-ratio: 1/1;
@@ -623,8 +1039,19 @@ const prepareNuevoBanner = () => {
   justify-content: center;
   align-items: center;
   cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s, background-color 0.2s;
+  border: 2px dashed transparent;
 }
+.dropzone:hover { border-color: #9584c4; background-color: #f5f0ff; }
 .plus-icon { color: #333; opacity: 0.8; }
+
+/* Preview de imagen en dropzone */
+.preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 
 .specs-selectors { display: flex; gap: 10px; width: 100%; margin-top: 20px; }
 .spec-select {
@@ -671,7 +1098,7 @@ const prepareNuevoBanner = () => {
 .spec-dropdown {
   background: transparent;
   border: none;
-  font-weight: normal; /* Texto sin negritas */
+  font-weight: normal;
   font-family: inherit;
   font-size: 0.9rem;
   outline: none;
@@ -679,7 +1106,7 @@ const prepareNuevoBanner = () => {
   width: 100%;
 }
 
-/* Ocultar flechas de los campos de número para que parezcan de texto */
+/* Ocultar flechas de los campos de número */
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -711,6 +1138,7 @@ input[type=number] {
 .icon-actions { display: flex; gap: 25px; }
 .icon-btn { background: none; border: none; cursor: pointer; color: #9584c4; transition: transform 0.2s, color 0.3s; }
 .icon-btn:hover { transform: scale(1.15); color: #7a69ab; }
+.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
 .inputs-stack { display: flex; flex-direction: column; gap: 15px; }
 .admin-input, .admin-textarea {
@@ -723,6 +1151,7 @@ input[type=number] {
   outline: none;
   background-color: #fafafa;
   transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
 }
 .admin-input:focus, .admin-textarea:focus { border-color: #9584c4; box-shadow: 0 0 0 3px rgba(149, 132, 196, 0.15); background-color: #fff; }
 .admin-textarea { height: 120px; resize: none; }
@@ -777,6 +1206,15 @@ input[type=number] {
   padding-right: 10px;
 }
 
+.no-results {
+  text-align: center;
+  color: #aaa;
+  font-style: italic;
+  font-family: 'Hina Mincho', serif;
+  font-size: 1.1rem;
+  padding: 30px;
+}
+
 .result-item {
   background: white;
   border: 1px solid #e0d8f0;
@@ -788,6 +1226,21 @@ input[type=number] {
   cursor: pointer;
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.result-nombre { flex: 1; }
+
+.result-tipo {
+  font-size: 0.8rem;
+  font-family: 'Inter', sans-serif;
+  background-color: #f0ebff;
+  color: #8B77D0;
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin-left: 15px;
 }
 
 .result-item:hover {
