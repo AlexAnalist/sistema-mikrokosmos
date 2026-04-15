@@ -25,12 +25,13 @@ const userRole = computed(() => usuario.value?.rol?.toLowerCase() || '')
 const canViewOrdersModule = computed(() => 
   ['gestor de ventas', 'gestor_de_ventas', 'administrador', 'admin', 'propietaria'].includes(userRole.value)
 )
-const canViewEditorModule = computed(() => 
+const canViewAdminModules = computed(() => 
   ['administrador', 'admin', 'propietaria'].includes(userRole.value)
 )
-const canViewStatsAndPermissions = computed(() => 
-  ['propietaria'].includes(userRole.value)
-)
+
+const goToRoute = (routeName: string) => {
+  router.push({ name: routeName })
+}
 
 // --- LÓGICA DE SESIÓN ---
 const verificarSesion = async () => {
@@ -141,13 +142,10 @@ onMounted(() => {
               <!-- Gestor de ventas en adelante -->
               <button v-if="canViewOrdersModule" @click="router.push('/gestor')" class="btn-menu">Módulo de pedidos</button>
               
-              <!-- Administrador en adelante -->
-              <button v-if="canViewEditorModule" @click="router.push('/admin/catalogo')" class="btn-menu">Módulo de edición</button>
+              <!-- Administrador y Propietaria -->
+              <button v-if="canViewAdminModules" @click="router.push('/admin/catalogo')" class="btn-menu">Módulo de edición</button>
+              <button v-if="canViewAdminModules" @click="router.push('/propietario')" class="btn-menu">Módulo de Administrador</button>
 
-              <!-- Solo Propietaria -->
-              <button v-if="canViewStatsAndPermissions" class="btn-menu">Estadísticas</button>
-              <button v-if="canViewStatsAndPermissions" class="btn-menu">Permisos</button>
-              
               <button @click="handleLogout" class="btn-logout">Cerrar sesión</button>
             </div>
           </div>

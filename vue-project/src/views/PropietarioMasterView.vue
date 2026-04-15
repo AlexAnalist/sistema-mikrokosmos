@@ -645,7 +645,7 @@ onMounted(() => fetchDashboard())
                 <label>Rol actual: <strong>{{ usr.rol }}</strong></label>
                 <select class="rol-select" v-model="rolEditando[usr.id_usuario]">
                   <option value="propietaria">Propietaria</option>
-                  <option value="gestor">Gestor de Ventas</option>
+                  <option value="Gestor de ventas">Gestor de Ventas</option>
                   <option value="cliente">Cliente</option>
                   <option value="administrador">Administrador</option>
                 </select>
