@@ -13,6 +13,10 @@ import TheFooter from '@/components/TheFooter.vue'
 
 const router = useRouter()
 
+const volverPerfil = () => {
+  router.push('/perfil')
+}
+
 // --- INTERFACES ---
 interface Producto {
   id_productos: number;
@@ -582,6 +586,14 @@ const prepareNuevoBanner = () => {
       <TheSideBar :is-open="sidebarOpen" @toggle-menu="toggleSidebar" />
       
       <main class="content-area" v-if="isAdmin">
+        <!-- Barra de Navegación "Atrás" integrada -->
+        <div class="top-navigation-bar">
+          <button @click="volverPerfil" class="back-button" title="Volver al Perfil">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="back-icon"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+          </button>
+          <h2 class="nav-title">Gestión de Catálogo</h2>
+        </div>
+
         <div class="admin-container">
           <header class="admin-view-header">
             <h1 class="view-title">Edición de Catálogo</h1>
@@ -1311,6 +1323,51 @@ input[type=number] {
 }
 
 .loader { text-align: center; color: #9584c4; font-style: italic; margin-top: 20px; font-family: 'Hina Mincho', serif;}
+
+/* TOP NAVIGATION BAR */
+.top-navigation-bar {
+  width: 100%;
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  padding: 0 0 16px 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #EEEEEE;
+}
+
+.back-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 50%;
+  transition: background 0.2s ease, transform 0.2s ease;
+  color: #333;
+}
+
+.back-button:hover {
+  background: #f5f5f7;
+  transform: translateX(-2px);
+}
+
+.back-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.nav-title {
+  flex: 1;
+  text-align: center;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 1.15rem;
+  color: #333;
+  margin: 0;
+  padding-right: 38px;
+}
 
 /* Scrollbar personalizado */
 .results-list::-webkit-scrollbar { width: 6px; }
