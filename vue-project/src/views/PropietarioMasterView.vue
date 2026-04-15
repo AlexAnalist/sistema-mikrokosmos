@@ -48,12 +48,23 @@ const navegarA = async (pantalla: 'dashboard' | 'usuarios' | 'perfil') => {
   if (pantalla === 'perfil')   fetchPerfil()
 }
 
+const tituloNavegacion = computed(() => {
+  if (pantallaActual.value === 'dashboard') return 'Dashboard Ejecutivo'
+  if (pantallaActual.value === 'usuarios') return 'Gestión de Usuarios'
+  return 'Administrador'
+})
+
+const volverPerfil = () => {
+  router.push('/perfil')
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // FILTROS GLOBALES
 // ════════════════════════════════════════════════════════════════════════════
-type TiempoFiltro = 'semanas' | 'meses' | 'años'
+type TiempoFiltro = 'día' | 'semanas' | 'meses' | 'años'
 
 const filtroTiempo     = ref<TiempoFiltro>('meses')
+const filtroDiaSemana  = ref<string>(new Date().getDay().toString())
 const filtroCategoria  = ref<string>('todas')
 const filtroEditorial  = ref<string>('todas')
 
@@ -147,6 +158,23 @@ const fetchDashboard = async () => {
 
 // ─── Computed: pedidos filtrados por tiempo ───────────────────────────────────
 const pedidosFiltrados = computed(() => {
+  if (filtroTiempo.value === 'día') {
+    const targetDay = parseInt(filtroDiaSemana.value)
+    const now = new Date()
+    const currentDay = now.getDay()
+    const diff = targetDay - currentDay
+    const targetDate = new Date()
+    targetDate.setDate(now.getDate() + diff)
+
+    return allPedidos.value.filter(p => {
+      // Usamos p.fecha (equivalente a created_at)
+      const d = new Date(p.fecha)
+      return d.getDate() === targetDate.getDate() && 
+             d.getMonth() === targetDate.getMonth() && 
+             d.getFullYear() === targetDate.getFullYear()
+    })
+  }
+
   const desde = new Date(getFechaDesde())
   return allPedidos.value.filter(p => new Date(p.fecha) >= desde)
 })
@@ -328,7 +356,9 @@ const chartLineasData = computed(() => {
 
   const getKey = (fecha: string): string => {
     const d = new Date(fecha)
-    if (filtroTiempo.value === 'semanas') {
+    if (filtroTiempo.value === 'día') {
+      return `${d.getHours().toString().padStart(2, '0')}:00`
+    } else if (filtroTiempo.value === 'semanas') {
       // Agrupar por día (últimos 7 días)
       return d.toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric' })
     } else if (filtroTiempo.value === 'meses') {
@@ -349,7 +379,10 @@ const chartLineasData = computed(() => {
     map[key] = (map[key] ?? 0) + ingreso
   }
 
-  const labels = Object.keys(map)
+  let labels = Object.keys(map)
+  if (filtroTiempo.value === 'día') {
+    labels.sort()
+  }
   return {
     labels,
     datasets: [{
@@ -376,7 +409,14 @@ const chartLineasOptions = {
   },
   scales: {
     x: { grid: { display: false }, ticks: { font: { family: 'Inter' } } },
-    y: { grid: { color: '#f0ecfb' }, ticks: { font: { family: 'Inter' }, callback: (v: any) => `$${(v/1000).toFixed(0)}k` }, beginAtZero: true }
+    y: { 
+      grid: { color: '#f0ecfb' }, 
+      ticks: { 
+        font: { family: 'Inter' }, 
+        callback: (v: any) => v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v}` 
+      }, 
+      beginAtZero: true 
+    }
   }
 }
 
@@ -478,6 +518,13 @@ onMounted(() => fetchDashboard())
       <TheSidebar :is-open="sidebarExpandido" @toggle-menu="toggleSidebar" />
 
       <main class="content-area">
+        <!-- Barra de Navegación "Atrás" integrada -->
+        <div class="top-navigation-bar">
+          <button @click="volverPerfil" class="back-button" title="Volver al Perfil">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="back-icon"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+          </button>
+          <h2 class="nav-title">{{ tituloNavegacion }}</h2>
+        </div>
 
         <!-- ── TABS ── -->
         <nav class="nav-roles">
@@ -509,13 +556,24 @@ onMounted(() => fetchDashboard())
               <!-- Tiempo -->
               <div class="filter-pill-group">
                 <button
-                  v-for="t in (['semanas', 'meses', 'años'] as const)"
+                  v-for="t in (['día', 'semanas', 'meses', 'años'] as const)"
                   :key="t"
                   class="filter-pill"
                   :class="{ active: filtroTiempo === t }"
                   @click="filtroTiempo = t"
                 >{{ t.charAt(0).toUpperCase() + t.slice(1) }}</button>
               </div>
+
+              <!-- Día Específico (si está seleccionado Día) -->
+              <select v-if="filtroTiempo === 'día'" class="filter-select" v-model="filtroDiaSemana">
+                <option value="1">Lunes</option>
+                <option value="2">Martes</option>
+                <option value="3">Miércoles</option>
+                <option value="4">Jueves</option>
+                <option value="5">Viernes</option>
+                <option value="6">Sábado</option>
+                <option value="0">Domingo</option>
+              </select>
 
               <!-- Categoría -->
               <select class="filter-select" v-model="filtroCategoria">
@@ -698,6 +756,51 @@ onMounted(() => fetchDashboard())
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Hina+Mincho&family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* TOP NAVIGATION BAR */
+.top-navigation-bar {
+  width: 100%;
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  padding: 0 0 16px 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #EEEEEE;
+}
+
+.back-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 50%;
+  transition: background 0.2s ease, transform 0.2s ease;
+  color: #333;
+}
+
+.back-button:hover {
+  background: #f5f5f7;
+  transform: translateX(-2px);
+}
+
+.back-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.nav-title {
+  flex: 1;
+  text-align: center;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 1.15rem;
+  color: #333;
+  margin: 0;
+  padding-right: 38px;
+}
 
 /* ─── LAYOUT ─────────────────────────────────────────────────────────────── */
 .page-layout  { display: flex; flex-direction: column; height: 100vh; background: #fff; font-family: 'Inter', sans-serif; }

@@ -3,6 +3,12 @@ import { ref, computed, onMounted } from 'vue'
 import { supabase } from '@/supabase'
 import TheHeader from '@/components/TheHeader.vue'
 import TheSidebar from '@/components/TheSideBar.vue'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+const volverPerfil = () => {
+  router.push('/perfil')
+}
 
 // 1. Interfaces Estrictas SQL
 interface Usuario {
@@ -134,6 +140,14 @@ onMounted(() => obtenerPedidos())
 
       <!-- VIP Dashboard Content -->
       <main class="dashboard-area">
+        
+        <!-- Barra de Navegación "Atrás" integrada -->
+        <div class="top-navigation-bar">
+          <button @click="volverPerfil" class="back-button" title="Volver al Perfil">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="back-icon"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+          </button>
+          <h2 class="nav-title">Módulo de Ventas</h2>
+        </div>
         
         <div v-if="cargando" class="loader-overlay">
            <div class="spinner"></div>
@@ -271,6 +285,51 @@ onMounted(() => obtenerPedidos())
 
 <style scoped>
 @import url('https://fonts.googleapis.com/css2?family=Hina+Mincho&family=Inter:wght@300;400;500;600&display=swap');
+
+/* TOP NAVIGATION BAR */
+.top-navigation-bar {
+  width: 100%;
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  padding: 0 0 16px 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #EEEEEE;
+}
+
+.back-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 50%;
+  transition: background 0.2s ease, transform 0.2s ease;
+  color: #333;
+}
+
+.back-button:hover {
+  background: #f5f5f7;
+  transform: translateX(-2px);
+}
+
+.back-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.nav-title {
+  flex: 1;
+  text-align: center;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 1.15rem;
+  color: #333;
+  margin: 0;
+  padding-right: 38px; /* Para compensar visualmente el botón de atrás */
+}
 
 .luxury-layout {
   display: flex;
