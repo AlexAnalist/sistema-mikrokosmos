@@ -138,7 +138,7 @@ onUnmounted(() => {
 
 .logo-section { display: flex; align-items: center; gap: 10px; cursor: pointer; text-decoration: none; color: inherit; }
 .logo-img { height: 55px; }
-.brand-name { font-size: 1.5rem; font-weight: bold; margin: 0; }
+.brand-name { font-size: 1.5rem; font-weight: bold; margin: 0; font-family: 'Hina Mincho', Georgia, serif; letter-spacing: 0.03em; }
 
 .search-container {
   flex: 0 1 40%;
