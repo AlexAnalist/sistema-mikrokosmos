@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
+import { supabase } from '@/supabase'
 
 interface Banner {
   imagen: string;
@@ -11,39 +12,62 @@ interface Banner {
 }
 
 const router = useRouter()
-
-const banners = ref<Banner[]>([
-  {
-    imagen: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=1200",
-    subtitulo: '¿Encontrarte a ti misma?',
-    titulo: 'PREVENTA IMPERDIBLE*',
-    promo: '¡Asegura tu libro hoy!',
-    idDestino: 1
-  },
-  {
-    imagen: "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?w=1200",
-    subtitulo: 'Sagas que atrapan',
-    titulo: 'ADÉNTRATE EN LA FANTASÍA',
-    promo: '¡Descubre estos mundos mágicos!',
-    idDestino: 21
-  },
-  {
-    imagen: "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=1200",
-    subtitulo: 'Tus favoritos de BookTok',
-    titulo: 'TENDENCIAS DEL MES',
-    promo: 'No te quedes sin leerlos.',
-    idDestino: 29
-  }
-])
-
+const banners = ref<Banner[]>([])
 const indiceActual = ref(0)
 let intervalo: any = null
 
-const siguienteBanner = () => {
-  indiceActual.value = (indiceActual.value + 1) % banners.value.length
+const cargarBanners = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('header')
+      .select('id_header, imagen_url, texto_banner')
+      .order('id_header', { ascending: true })
+
+    if (error) throw error
+
+    if (data && data.length > 0) {
+      banners.value = data.map((b: any) => {
+        let parsed = { subtitulo: '', titulo: '', promo: '', idDestino: 1 }
+        if (b.texto_banner) {
+          try {
+            parsed = JSON.parse(b.texto_banner)
+          } catch(e) {
+            parsed.titulo = b.texto_banner
+          }
+        }
+        return {
+          imagen: b.imagen_url || '',
+          subtitulo: parsed.subtitulo || '',
+          titulo: parsed.titulo || '',
+          promo: parsed.promo || '',
+          idDestino: parsed.idDestino || 1
+        }
+      })
+    } else {
+      // Default fallback en caso de no haber banners
+      banners.value = [
+        {
+          imagen: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=1200",
+          subtitulo: '¿Encontrarte a ti misma?',
+          titulo: 'PREVENTA IMPERDIBLE*',
+          promo: '¡Asegura tu libro hoy!',
+          idDestino: 1
+        }
+      ]
+    }
+  } catch (e) {
+    console.error("Error cargando banners para DynamicBanner:", e)
+  }
 }
 
-onMounted(() => {
+const siguienteBanner = () => {
+  if (banners.value.length > 0) {
+    indiceActual.value = (indiceActual.value + 1) % banners.value.length
+  }
+}
+
+onMounted(async () => {
+  await cargarBanners()
   intervalo = setInterval(siguienteBanner, 10000)
 })
 
@@ -52,12 +76,14 @@ onBeforeUnmount(() => {
 })
 
 const irADetalle = (id: number) => {
-  router.push({ name: 'book-detail', params: { id } })
+  if (id) {
+    router.push({ name: 'book-detail', params: { id } })
+  }
 }
 </script>
 
 <template>
-  <section class="dynamic-banner-section">
+  <section class="dynamic-banner-section" v-if="banners.length > 0">
     <div class="banner-slider">
       <TransitionGroup name="fade">
         <div 

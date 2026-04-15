@@ -23,10 +23,18 @@ interface Producto {
   url_imagen?: string;
 }
 
+interface BannerData {
+  titulo: string;
+  subtitulo: string;
+  promo: string;
+  idDestino: number;
+}
+
 interface Banner {
   id_header: number;
   imagen_url: string;
   texto_banner: string;
+  data?: BannerData;
 }
 
 interface UserSession {
@@ -51,7 +59,7 @@ const isCreandoBanner    = ref(false)
 const cargandoBanners    = ref(false)
 const archivoBanner      = ref<File | null>(null)
 const bannerPreviewUrl   = ref<string>('')
-const textoBannerNuevo   = ref<string>('')
+const formBanner         = ref<BannerData>({ titulo: '', subtitulo: '', promo: '', idDestino: 1 })
 const modoVista          = ref<'nuevo' | 'busqueda' | 'edicion' | 'banner'>('nuevo')
 const cargando           = ref(false)
 
@@ -112,7 +120,19 @@ const cargarBanners = async () => {
       .select('id_header, imagen_url, texto_banner')
       .order('id_header', { ascending: true })
     if (error) throw error
-    bannersData.value = (data || []) as Banner[]
+    bannersData.value = (data || []).map((b: any) => {
+      let parsed: BannerData = { titulo: '', subtitulo: '', promo: '', idDestino: 1 };
+      if (b.texto_banner) {
+        try {
+          parsed = JSON.parse(b.texto_banner);
+        } catch(e) {
+          // Fallback si no es JSON (ej. si era un string simple)
+          parsed.titulo = b.texto_banner;
+        }
+      }
+      return { ...b, data: parsed };
+    }) as Banner[]
+    seleccionarBannerLocal(indiceBannerActual.value)
   } catch (e: any) {
     console.error('Error cargando banners:', e.message)
   } finally {
@@ -132,6 +152,18 @@ const uploadBannerImagen = async (): Promise<string | null> => {
   }
   const { data } = supabase.storage.from('imagenes').getPublicUrl(path)
   return data.publicUrl
+}
+
+const seleccionarBannerLocal = (i: number) => {
+  indiceBannerActual.value = i
+  bannerPreviewUrl.value = ''
+  archivoBanner.value = null
+  const b = bannersData.value[i]
+  if (b && b.data) {
+    formBanner.value = { ...b.data }
+  } else {
+    formBanner.value = { titulo: '', subtitulo: '', promo: '', idDestino: 1 }
+  }
 }
 
 // --- CONEXIÓN SUPABASE: PRODUCTOS ---
@@ -291,14 +323,14 @@ const handleSave = async () => {
 
       if (isCreandoBanner.value) {
         // Crear nuevo banner
-        if (!urlImagen && !textoBannerNuevo.value.trim()) {
+        if (!urlImagen && !formBanner.value.titulo.trim()) {
           alert('Por favor selecciona una imagen o escribe un título para el banner.')
           cargando.value = false
           return
         }
         const { error } = await supabase
           .from('header')
-          .insert({ imagen_url: urlImagen || '', texto_banner: textoBannerNuevo.value })
+          .insert({ imagen_url: urlImagen || '', texto_banner: JSON.stringify(formBanner.value) })
         if (error) throw error
         alert('✅ Banner creado correctamente.')
       } else {
@@ -306,9 +338,11 @@ const handleSave = async () => {
         const bannerActual = bannersData.value[indiceBannerActual.value]
         if (!bannerActual) { cargando.value = false; return }
 
-        const updates: Partial<Banner> = {}
+        const updates: any = {}
         if (urlImagen) updates.imagen_url = urlImagen
-        if (textoBannerNuevo.value.trim()) updates.texto_banner = textoBannerNuevo.value.trim()
+        
+        // Al editar siempre actualizamos el JSON porque vienen del formulario
+        updates.texto_banner = JSON.stringify(formBanner.value)
 
         if (Object.keys(updates).length === 0) {
           alert('No hay cambios para guardar. Selecciona una imagen o edita el título.')
@@ -329,7 +363,7 @@ const handleSave = async () => {
       isCreandoBanner.value = false
       archivoBanner.value   = null
       bannerPreviewUrl.value = ''
-      textoBannerNuevo.value = ''
+      formBanner.value = { titulo: '', subtitulo: '', promo: '', idDestino: 1 }
     } catch (err: any) {
       alert('❌ Error al guardar banner: ' + err.message)
     } finally {
@@ -471,7 +505,7 @@ const handleDelete = async () => {
       isCreandoBanner.value = false
       archivoBanner.value   = null
       bannerPreviewUrl.value = ''
-      textoBannerNuevo.value = ''
+      formBanner.value = { titulo: '', subtitulo: '', promo: '', idDestino: 1 }
       return
     }
     const bannerActual = bannersData.value[indiceBannerActual.value]
@@ -485,7 +519,7 @@ const handleDelete = async () => {
       if (error) throw error
       alert('✅ Banner eliminado correctamente.')
       await cargarBanners()
-      indiceBannerActual.value = 0
+      seleccionarBannerLocal(0)
     } catch (err: any) {
       alert('❌ Error al eliminar banner: ' + err.message)
     } finally {
@@ -638,15 +672,22 @@ const prepareNuevoBanner = () => {
                     </div>
                   </div>
 
-                  <!-- Título -->
+                  <!-- Título y detalles -->
+                  <div class="banner-section">
+                    <p class="section-label">Subtítulo:</p>
+                    <input type="text" v-model="formBanner.subtitulo" placeholder="Ej: Tus favoritos de BookTok" class="admin-input" />
+                  </div>
                   <div class="banner-section">
                     <p class="section-label">Título del banner:</p>
-                    <input
-                      type="text"
-                      v-model="textoBannerNuevo"
-                      placeholder="Ej: PREVENTA IMPERDIBLE"
-                      class="admin-input"
-                    />
+                    <input type="text" v-model="formBanner.titulo" placeholder="Ej: PREVENTA IMPERDIBLE*" class="admin-input" />
+                  </div>
+                  <div class="banner-section">
+                    <p class="section-label">Texto Promo:</p>
+                    <input type="text" v-model="formBanner.promo" placeholder="Ej: ¡Agrega al carrito ahora!" class="admin-input" />
+                  </div>
+                  <div class="banner-section">
+                    <p class="section-label">ID Producto (Destino):</p>
+                    <input type="number" v-model="formBanner.idDestino" placeholder="Ej: 1" class="admin-input" />
                   </div>
 
                   <!-- Dropzone (abajo) -->
@@ -660,7 +701,7 @@ const prepareNuevoBanner = () => {
                   <!-- Botón cancelar (el ✓ en el header acepta) -->
                   <button
                     class="cancel-banner-btn"
-                    @click="isCreandoBanner = false; bannerPreviewUrl = ''; archivoBanner = null; textoBannerNuevo = ''"
+                    @click="isCreandoBanner = false; bannerPreviewUrl = ''; archivoBanner = null; seleccionarBannerLocal(indiceBannerActual)"
                   >
                     Cancelar
                   </button>
@@ -695,7 +736,7 @@ const prepareNuevoBanner = () => {
                           :key="b.id_header"
                           class="dot-admin"
                           :class="{ active: i === indiceBannerActual }"
-                          @click="indiceBannerActual = i; bannerPreviewUrl = ''; archivoBanner = null; textoBannerNuevo = ''"
+                          @click="seleccionarBannerLocal(i)"
                         ></span>
                       </div>
                     </div>
@@ -708,27 +749,34 @@ const prepareNuevoBanner = () => {
                       </div>
                     </div>
 
-                    <!-- Editar título del banner seleccionado -->
+                    <!-- Editar título y detalles del banner seleccionado -->
                     <div class="banner-section">
-                      <p class="section-label">Editar título:</p>
-                      <input
-                        type="text"
-                        v-model="textoBannerNuevo"
-                        :placeholder="bannersData[indiceBannerActual]?.texto_banner || 'Título del banner...'"
-                        class="admin-input"
-                      />
+                      <p class="section-label">Editar Subtítulo:</p>
+                      <input type="text" v-model="formBanner.subtitulo" placeholder="Subtítulo..." class="admin-input" />
+                    </div>
+                    <div class="banner-section">
+                      <p class="section-label">Editar Título:</p>
+                      <input type="text" v-model="formBanner.titulo" placeholder="Título del banner..." class="admin-input" />
+                    </div>
+                    <div class="banner-section">
+                      <p class="section-label">Editar Promo:</p>
+                      <input type="text" v-model="formBanner.promo" placeholder="Texto llamativo..." class="admin-input" />
+                    </div>
+                    <div class="banner-section">
+                      <p class="section-label">ID Producto (Destino):</p>
+                      <input type="number" v-model="formBanner.idDestino" placeholder="ID (ej: 1)" class="admin-input" />
                     </div>
                   </template>
 
-                  <!-- Botón crear nuevo (máximo 3) -->
+                  <!-- Botón crear nuevo (máximo 5) -->
                   <button
-                    v-if="bannersData.length < 3"
+                    v-if="bannersData.length < 5"
                     class="add-new-banner-btn"
-                    @click="isCreandoBanner = true; bannerPreviewUrl = ''; archivoBanner = null; textoBannerNuevo = ''"
+                    @click="isCreandoBanner = true; bannerPreviewUrl = ''; archivoBanner = null; formBanner = { titulo: '', subtitulo: '', promo: '', idDestino: 1 }"
                   >
                     Agrega un nuevo banner
                   </button>
-                  <p v-else class="banner-max-msg">Límite de 3 banners alcanzado. Elimina uno para agregar otro.</p>
+                  <p v-else class="banner-max-msg">Límite de 5 banners alcanzado. Elimina uno para agregar otro.</p>
 
                 </template>
               </template>
@@ -979,6 +1027,17 @@ const prepareNuevoBanner = () => {
   transition: border-color 0.2s, background-color 0.2s;
 }
 .banner-dropzone:hover { border-color: #8B77D0; background-color: #f5f0ff; }
+
+.cancel-banner-btn {
+  background-color: #ffcccc;
+  color: #c9302c;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 10px;
+  align-self: center;
+}
 
 .banner-placeholder-text {
   display: flex;
