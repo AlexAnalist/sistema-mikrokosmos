@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ChevronRight, ChevronDown, Menu } from 'lucide-vue-next'
+
+const router = useRouter()
 
 // Recibimos el estado del sidebar desde el padre
 defineProps<{
@@ -9,6 +12,11 @@ defineProps<{
 
 // Definimos los eventos
 const emit = defineEmits(['toggle-menu', 'filtrar'])
+
+const handleFilter = (categoria: string, valor: string) => {
+  emit('filtrar', { categoria, valor })
+  router.push({ name: 'home', query: { categoria, valor } })
+}
 
 interface Seccion {
   nombre: string;
@@ -68,7 +76,7 @@ const toggleSeccion = (index: number) => {
                 v-for="opcion in seccion.opciones" 
                 :key="opcion" 
                 class="submenu-item"
-                @click="emit('filtrar', { categoria: seccion.nombre, valor: opcion })"
+                @click="handleFilter(seccion.nombre, opcion)"
               >
                 {{ opcion }}
               </li>

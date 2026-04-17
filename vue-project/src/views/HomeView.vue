@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import TheHeader from '@/components/TheHeader.vue'
 import TheSidebar from '@/components/TheSideBar.vue'
 import TheFooter from '@/components/TheFooter.vue'
@@ -20,19 +21,19 @@ const sidebarExpandido = ref(true)
 const productos = ref<ProductoHome[]>([])
 const cargando = ref(true)
 const filtroActivo = ref<{ categoria: string, valor: string } | null>(null)
+const route = useRoute()
+const router = useRouter()
 
 const toggleSidebar = () => {
   sidebarExpandido.value = !sidebarExpandido.value
 }
 
 const aplicarFiltro = (filtro: { categoria: string, valor: string }) => {
-  filtroActivo.value = filtro
-  obtenerDatosHome()
+  router.push({ name: 'home', query: { categoria: filtro.categoria, valor: filtro.valor } })
 }
 
 const limpiarFiltro = () => {
-  filtroActivo.value = null
-  obtenerDatosHome()
+  router.push({ name: 'home' })
 }
 
 // --- PETICIONES CON FETCH ---
@@ -90,9 +91,14 @@ const obtenerDatosHome = async () => {
   }
 }
 
-onMounted(() => {
+watch(() => route.query, (newQuery) => {
+  if (newQuery.categoria && newQuery.valor) {
+    filtroActivo.value = { categoria: newQuery.categoria as string, valor: newQuery.valor as string }
+  } else {
+    filtroActivo.value = null
+  }
   obtenerDatosHome()
-})
+}, { immediate: true })
 </script>
 
 <template>
