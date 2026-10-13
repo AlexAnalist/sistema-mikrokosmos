@@ -127,6 +127,9 @@ import { useCartStore } from '@/stores/cart';
 const router = useRouter();
 const cartStore = useCartStore();
 
+// Nombre del bot de Telegram
+const TELEGRAM_BOT_USERNAME = 'mikrokosmosli_bot';
+
 const deliveryType = ref('local');
 const localOption = ref('sede');
 const isProcessing = ref(false);
@@ -230,7 +233,7 @@ const processDelivery = async () => {
   isProcessing.value = true;
 
   const tipoEntregaLimpio = deliveryType.value === 'local' ? 'Local' : 'Nacional';
-  const direccionFinal = formData.value.direccion || 'Sin dirección';
+  const direccionFinal = formData.value.direccion || 'Sede principal';
 
   try {
     // 1. Verificar autenticación del usuario
@@ -250,15 +253,15 @@ const processDelivery = async () => {
       throw new Error("No se encontró el perfil del usuario en la base de datos.");
     }
 
-    const { id_usuario, nombre } = usuarioData;
+    const { id_usuario } = usuarioData;
 
     // 3. LLAMADA ATÓMICA RPC A SUPABASE
-    const { data: idPedidoGenerado, error: rpcError } = await supabase.rpc('registrar_pedido_completo', {
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('registrar_pedido_completo', {
       p_id_usuario: id_usuario,
       p_tipo_entrega: tipoEntregaLimpio,
       p_direccion_envio: direccionFinal,
       p_productos: cart.value.map(item => ({
-        id: Number(item.id_producto),
+        id: Number(item.id_producto || item.id),
         cantidad: Number(item.cantidad),
         precio: Number(item.precio)
       }))
@@ -268,25 +271,35 @@ const processDelivery = async () => {
       throw rpcError;
     }
 
+    const idPedidoGenerado = rpcResult?.id_pedido;
     console.log(`✅ Pedido #${idPedidoGenerado} registrado con éxito vía RPC.`);
 
-    // 4. PREPARAR Y REDIRECCIONAR A WHATSAPP SOLO SI LA TRANSACCIÓN FUE EXITOSA
-    const listaLibros = cart.value
-      .map(item => `${item.titulo} (x${item.cantidad})`)
-      .join(', ');
-      
-    const totalVenta = `$${total_carrito.value.toFixed(2)}`;
+    // 4. CONSTRUIR EL MENSAJE FORMATO PLANTILLA PARA EL BOT DE TELEGRAM
+    let mensaje = `¡Hola Mikrokosmos! 📚\n\n`;
+    mensaje += `Quiero realizar un pedido con los siguientes detalles:\n\n`;
+    mensaje += `*Tipo de Entrega:* Entrega ${tipoEntregaLimpio}\n`;
     
-    let nombreCliente = nombre || "Cliente";
-    const userManual = JSON.parse(localStorage.getItem('mikrokosmos_user') || '{}');
-    if (userManual.nombre) nombreCliente = userManual.nombre;
+    if (deliveryType.value === 'local') {
+      mensaje += `*Opción:* ${localOption.value === 'sede' ? 'Recoger en sede' : 'Delivery local'}\n`;
+    }
     
-    const mensaje = `Hola Mikrokosmos, mi nombre es ${nombreCliente}, mi pedido es: ${listaLibros} con un total de ${totalVenta}. Mi entrega es ${tipoEntregaLimpio} en la dirección ${direccionFinal}`;
+    mensaje += `*Dirección:* ${direccionFinal}\n\n`;
+    mensaje += `*Resumen del Pedido:* 📦\n`;
 
+    cart.value.forEach(item => {
+      const titulo = item.titulo || item.nombre;
+      const subtotal = (Number(item.precio) * Number(item.cantidad)).toFixed(2);
+      mensaje += `- ${titulo} (x${item.cantidad}): $${subtotal}\n`;
+    });
+
+    mensaje += `\n*TOTAL A PAGAR:* $${total_carrito.value.toFixed(2)}\n\n`;
+    mensaje += `_¡Quedo atento a su confirmación!_`;
+
+    // 5. REDIRECCIONAR A TELEGRAM
     const encodedMessage = encodeURIComponent(mensaje);
-    const whatsappUrl = `https://wa.me/584247846963?text=${encodedMessage}`;
+    const telegramUrl = `https://t.me/${TELEGRAM_BOT_USERNAME}?text=${encodedMessage}`;
     
-    window.open(whatsappUrl, '_blank');
+    window.open(telegramUrl, '_blank');
     cartStore.vaciarCarrito();
     router.push('/');
 
